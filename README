@@ -1,0 +1,305 @@
+meRanTK 1.2.1b
+methylated RNA analysis Tool Kit
+© Dietmar Rieder, 2019
+
+AUTHOR/SUPPORT:
+Dietmar Rieder, dietmar . rieder (at) i-med . ac .at
+
+MANUAL:
+http://icbi.at/software/meRanTK/downloads/1.2.0/meRanTK_userGuide.pdf
+
+DIRECTORIES CONTENTS:
+./src:		all source files of meRanTK
+./doc:		documentation
+./extutils:	pre-compiled platform specific reuired external programs
+		Linux x86_64 only (MAC OS planned)
+./util:		Some useful Perl scripts
+
+
+
+INSTALL TO RUN THE TOOLS AS STANDALONE LINUX 64Bit EXECUTABLE (the easy way)
+
+Once you have downloaded meRanTK extract the contents of the ZIP file in the system folder
+where you want to install meRanTK. You should now be ready to run the meRan tools!
+
+In case you do not want to use the provided versions of the required third party programs
+(STAR, bowtie2, hisat2, see also meRanTK-userGuide.pdf in docs), please make sure
+that these programs are installed on your system and can be found in your systems PATH ($PATH).
+If your system has these tools installed, you should either rename or delete the “./extutils”
+folder in the meRanTK main folder, this way the third party tools from your system will be used.
+
+
+Note: In order to be able to create m-bias plots (see manual) with meRanT/G you will need to install
+the libgd2 on your system. If it is not installed you’ll see an error message like the following:
+
+“Can't locate object method "new" via package "GD::Graph::lines" at script/meRanGh.pl line xxxx”
+
+
+INSTALLING/RUNNING FROM SOURCE:
+
+Please see the meRanTK-userGuide.pdf from the doc directory for detailed documentation.
+
+
+HARDWARE REQUIREMENTS:
+x86-64 compatible processors
+64 bit Linux or Mac OS X 
+- meRanGs: 60GB of RAM for human genome
+- meRanGh/meRanT: ~15GB of RAM for human genome
+
+SOFTWARE REQUIREMENTS:
+    - Perl	>5.10	Only needed if running from source
+
+    - Bowtie2	http://bowtie-bio.sourceforge.net/bowtie2/index.shtml
+      2.2.9 (pre compiled binary for 64bit Linux is included in meRanTK)
+
+    - STAR  https://github.com/alexdobin/STAR/releases
+      any of:
+	    2.4.0k,
+	    2.2.4a,
+	    2.5.0c,
+	    2.5.2.a, (pre compiled binary for 64bit Linux is included in meRanTK)
+	    2.5.2.b
+
+    - HiSat2  http://ccb.jhu.edu/software/hisat2/index.shtml
+      2.0.4 (pre compiled binary for 64bit Linux is included in meRanTK)
+
+
+NOTE:
+This release was tested with the default parameters on Linux x86_64 for mouse genomes.
+
+
+
+Quick start:
+------------
+
+Some testing examples for each of the meRanTK tools are listed below. All the required
+testdata should be included in the meRanTK distribution and can be found in the ./testdata
+directory.
+
+Please note:
+For keeping the size of the distribution small and test run times short, we
+included only very small datasets and reference sequences, so please do NOT expect high
+mapping efficienies or many m5C calls in these testing examples.
+
+If you want to test meRanTK on full datasets please take a look at the "Mus musculus test data"
+from the "Download" section at the meRanTK website:
+
+
+		http://icbi.at/meRanTK/
+
+
+For a detailed description of the options used and for all available options, please see the
+meRanTK_userGuide.pdf in the doc directory or use the "-h" option, i.e.:
+
+    meRanT -h
+    meRanT mkbsidx -h
+    meRanT align -h
+
+    meRanGs -h
+    meRanGs mkbsidx -h
+    meRanGs align -h
+
+    meRanGh -h
+    meRanGh mkbsidx -h
+    meRanGh align -h
+
+    meRanCall -h
+
+    meRanCompare -h
+
+    meRanAnnotate -h
+
+
+
+meRanGs - align RNA-BSseq reads to a reference genome (STAR, fast, precise, memory intensive)
+=============================================================================================
+
+1.
+Example for generating a bisulfite index for meRanGs using the included test data:
+
+
+    ./meRanGs mkbsidx  \
+      -t 2 \
+      -fa ./testdata/mm10/chr19.fa \
+      -GTF ./testdata/mm10/ref_GRCm38.p2_top_level_no_prediction_chr19_sort.gff3 \
+      -GTFtagEPT Parent \
+      -GTFtagEPG gene \
+      -id ./testdata/mm10/meRanGsIDX
+
+Note this testing example is only using mm10 chromosome 19!
+The index is optimized for 100bp long reads, which is the default (-sjO 49 would set it 49).
+
+ATTENTION: the sequence ids (chromosome names) in GTF/GFF file have to match those in the genome
+           fasta file!
+
+
+2.
+Example for aligning RNA-BSseq reads to the test genome using the meRanGs index created in before.
+
+    ./meRanGs align \
+      -t 2 \
+      -f ./testdata/fastq/clean_KHOD_400k_test.fastq \
+      -id ./testdata/mm10/meRanGsIDX \
+      -bg \
+      -o ./testdata/results \
+      -S meRanGs_test.sam \
+      -MM \
+      -un \
+      --star_genomeLoad NoSharedMemory
+
+
+3.
+Example for calling m5Cs from meRanGs aligned RNA-BSseq reads.
+
+    ./meRanCall \
+      -p 2 \
+      -s ./testdata/results/meRanGs_test_sorted.bam \
+      -f ./testdata/mm10/chr19.fa \
+      -gref \
+      -o ./testdata/results/meRanGs_meRanCall_m5Cs.txt \
+      -md 50 \
+      -cr 0.99 \
+      -mBQ 30 \
+      -bed63 \
+      -sc 5
+
+
+
+meRanGh - align RNA-BSseq reads to a reference genome (HiSat2, fast, memory saving)
+===================================================================================
+
+1.
+Example for generating a bisulfite index for meRanGh using the included test data:
+
+
+    ./meRanGh mkbsidx  \
+      -t 2 \
+      -fa ./testdata/mm10/chr19.fa \
+      -id ./testdata/mm10/meRanGhIDX
+
+Note this testing example is only using mm10 chromosome 19!
+
+
+2.
+Example for aligning RNA-BSseq reads to the test genome using the meRanGh index created before.
+
+    ./meRanGh align \
+      -t 2 \
+      -f ./testdata/fastq/clean_KHOD_400k_test.fastq \
+      -id ./testdata/mm10/meRanGhIDX \
+      -GTF ./testdata/mm10/ucsc_mm10_chr19.gtf \
+      -bg \
+      -o ./testdata/results \
+      -S meRanGh_test.sam \
+      -MM \
+      -un
+
+3.
+Example for calling m5Cs from meRanGh aligned RNA-BSseq reads.
+
+    ./meRanCall \
+      -p 2 \
+      -s ./testdata/results/meRanGh_test_sorted.bam \
+      -f ./testdata/mm10/chr19.fa \
+      -gref \
+      -o ./testdata/results/meRanGh_meRanCall_m5Cs.txt \
+      -md 50 \
+      -cr 0.99 \
+      -mBQ 30 \
+      -bed63 \
+      -sc 5
+
+
+meRanT - align RNA-BSseq reads to a set of reference transcripts
+===================================================================================
+
+
+---------- refSeq transcripts -----------
+
+1.
+Example for generating a refSeq transcript to genen name map file:
+
+    ./util/mkRefSeq2GeneMap.pl \
+      -f ./testdata/refSeq/mm10.refSeqRNA-noPRED.500.fa \
+      -m ./testdata/refSeq/mm10.refSeqRNA-noPRED.500.t2g.map
+
+
+2.
+Example for generating a refSeq bisulfite index for meRanT using the included test data:
+
+    ./meRanT mkbsidx \
+      -t 2 \
+      -fa ./testdata/refSeq/mm10.refSeqRNA-noPRED.500.fa \
+      -id ./testdata/mm10/meRanTIDX/
+
+    Note: this testing example is only using 500 transcripts of the mm10 refSeq database!
+
+3.
+Example for aligning RNA-BSseq reads to the test transcriptome using the meRanT index created before.
+
+     ./meRanT align \
+       -t 2 \
+       -f ./testdata/fastq/clean_KHOD_400k_test.fastq \
+       -i2g ./testdata/refSeq/mm10.refSeqRNA-noPRED.500.t2g.map \
+       -o ./testdata/results \
+       -S meRanT_test.sam  \
+       -x ./testdata/mm10/meRanTIDX/mm10.refSeqRNA-noPRED.500_C2T
+
+4.
+Example for calling m5Cs from meRanT aligned RNA-BSseq reads (refSeq transcriptome 500 transcripts).
+
+    ./meRanCall \
+      -p 2 \
+      -s ./testdata/results/meRanT_test.sam \
+      -f ./testdata/refSeq/mm10.refSeqRNA-noPRED.500.fa \
+      -tref \
+      -o ./testdata/results/meRanT_meRanCall_m5Ct.txt \
+      -md 50 \
+      -cr 0.99 \
+      -mBQ 30 \
+      -sc 5
+
+    Note: you want get any m5Cs called, since we just used a very small subsets of reads and
+    transcripts from the refernce databases.
+
+
+
+---------- tRNAs mm10 -----------
+
+1.
+Example for generating a _tRNA_ bisulfite index for meRanT using the included test data:
+
+    ./meRanT mkbsidx \
+      -t 2 \
+      -fa ./testdata/tRNAs/mm10.tRNAs.20140204.fa \
+      -id ./testdata/mm10/meRanT_tRNA_IDX
+
+    Note: this testing example is for mm10 tRNAs!
+
+2.
+Example for aligning RNA-BSseq reads to the mm10 tRNAs using the meRanT index created before.
+
+     ./meRanT align \
+       -t 2 \
+       -f ./testdata/fastq/clean_KHOD_400k_test.fastq \
+       -i2g ./testdata/tRNAs/mm10.tRNA.20140204.map \
+       -o ./testdata/results \
+       -S meRanT_tRNAs_test.sam  \
+       -x ./testdata/mm10/meRanT_tRNA_IDX/mm10.tRNAs.20140204_C2T
+
+3.
+Example for calling m5Cs from meRanT aligned RNA-BSseq reads (mm10 tRNAs).
+
+    ./meRanCall \
+      -p 2 \
+      -s ./testdata/results/meRanT_tRNAs_test.sam \
+      -f ./testdata/tRNAs/mm10.tRNAs.20140204.fa \
+      -tref \
+      -o ./testdata/results/meRanT_tRNAs_meRanCall_m5Ct.txt \
+      -md 50 \
+      -cr 0.99 \
+      -mBQ 30 \
+      -sc 5
+
+    With tRNAs you should get quite some m5Cs called, since the RNA-BSseq many reads from Khoddami & Cairns
+    used in the example map to tRNAs.

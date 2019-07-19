@@ -1,0 +1,121 @@
+2019/04/08
+-Version 1.2.1b
+  - meRanGh,meRanGs, meRanT:
+    bugfix for correctly processing gzipped fastq files.
+    reported by Sangrea Shim
+  - meRanGh:
+    bugfix for dovetailing reads which were filtered out even
+    if -dt was set.
+    reported by Jianheng Liu <liujh26<at>mail2.sysu.edu.cn>
+  - meRanGs:
+    bugfix for dovetailing reads which were filtered out even
+    if -dt was set. Note: -dt option needs STAR version 2.6.1d
+    to work.
+    Added support for STAR_2.6.1d
+  - meRanCall:
+    bugfix for situations where only reverse reads are provided.
+    reported by Andrew Janowczyk <andrew.janowczyk<at>unil.ch>
+2019/01/29
+-Version 1.2.1a
+  - meRanGh:
+    bugfix for situations where only reverse reads are provided.
+    reported by Andrew Janowczyk <andrew.janowczyk<at>unil.ch>
+-Version 1.2.1
+  - meRanGs, meRanGh:
+    circumvent file locking issues seen on some systems during concurrent
+    writing.
+  - meRanCall: added Fisher exact Test as statistical methylation state test
+-Version 1.2.0a
+  - meRanAnnotate: fixed dereference error
+2016/09/29
+- Version 1.2.0
+  - NEW tool meRanGh:
+    Implemented a new RNA-BSseq aligning tool called meRanGh.
+    The tool is using the alignment engine from HiSat2. Is is
+    comparable in speed to meRanGs but has a substatially lower
+    memory requirement.
+  - Deprecating meRanGt:
+    ! meRanGt is now deprecated ! It will not be developed any further.
+  - meRanGs:
+    Added support for STAR_2.5.2b
+    fixed alignment score bug (AS:i:0 was set to -1_000_000)
+2016/07/07
+- Version 1.1.2
+  - mkRefSeq2GeneMap.pl: fixed a bug (last sequence in fasta was ignored)
+    reported by Jun Li (jun.li04<at>adelaide.edu.au)
+2016/06/23
+- Version 1.1.2
+ - meRanT: check for empty gene name when trying  to add gene names in SAM output
+ - meRanT: check bowtie2 version and require 2.2.9 (or greater)
+ - meRanT: use multithreaded index building option from bowtie 2.2.9
+ - meRanGt: require tophat2 version 2.1.1 (or greater). This version
+            is now officially supporting the large bowtie2 indexes and
+            includes the patch shipped with meRanGt 1.1.1b
+ - meRanGs: added support for STAR_2.5.2a
+2016/02/29
+- Version 1.1.1b
+ - fixed arrayref shifting (does not work with all perl versions)
+ - Improved error handling for meRanGt index generation
+ - Improved checking for fasta reference matching reference used to create
+   alignments
+ - correct sequence context fetching at start and end of reference sequence
+2016/01/12
+- Version 1.1.1a
+- fixed some typos
+- fixed doc
+- if no output directory is specified (-o) meRanTK uses now the directory
+  of the SAM output file to store result files. If an output directoy is
+  specified, all result files including the SAM file will stored therein,
+  differing paths in specified with the SAM output file name will be ignored.
+  (suggested by Sven E. Templer)
+- meRanGt: added a patched version of tophat2 to support large bowtie2 indexes
+           the patch is included
+           (suggested by Sven E. Templer)
+- updated included bowtie2 to version 2.2.6
+2016/01/11
+- Version 1.1.1
+- Added support for STAR version STAR_2.5.0c
+- Added '-star_limitGenomeGenerateRAM' option to limit
+  memory usage during index generation in mkbsidx mode
+  (suggested by Sven E. Templer)
+2015/08/17
+- Version 1.1.0
+- Added support for STAR version STAR_2.4.2a
+- merged "MP" version code into the main version
+  it seems to be stable
+- Added meRanCompare (experiment comparison)
+- Added meRanAnnotate (m5C annotation tool)
+- Added Aza-IP support for meRanCall and meRanCompare
+- Improved BH FDR methods
+- Added Fisher's exact test to meRanCall to compare candidate with
+  baseline sequencing error (used if conversion rate is unknown)
+- Added "-region" option to meRanCall to call only m5Cs in regions
+  specified in a given BED file
+- Added "-excludeSeqID" option to meRanCall to exclude a given sequence/chromsome
+  from m5C calling
+- docs updates
+- many small improvements and bug fixes
+
+2015/04/07
+- Added support for STAR version STAR_2.4.0k
+
+2015/03/31
+- Version 1.0.1
+- Added speed improved versions for meRanGs and meRanGt:
+  meRanGsMP cuts the running time of meRanGs down to ~55%
+  meRanGtMP cuts the running time of meRanGt down to ~85%
+  The two versions now make (better) use of multiprocessing
+  They are still not fully tested, so we consider them beta.
+  However, our tests did all run sucessfully so far.
+  The "MP" versions will be merged into the main versions
+  soon.
+
+2015/03/10
+- Added -mbQS option to meRanT, meRanGs and meRanGt
+- improved mbias plot generation
+
+2015/02/20
+- Added the STAR '--sjdbGTFtagExonParentGene' option to meRanGs mkbsidx
+
+2015/02/17
+- First public release. Version 1.0.0

@@ -3,7 +3,7 @@
 #
 #  mkRefSeq2GeneMap.pl
 #
-#  Copyright 2019 Dietmar Rieder <dietmar.rieder@i-med.ac.at>
+#  Copyright 2015 Dietmar Rieder <dietmar.rieder@i-med.ac.at>
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -29,18 +29,20 @@ use Getopt::Long qw(:config no_ignore_case no_auto_abbrev);
 use IO::File;
 use File::Basename;
 
-my $VERSION = '1.0.0';
+my $VERSION = '1.0.1';
 my $version;
 my $help;
 
 my $fastaDB = "";
 my $mapFile = "";
 
-GetOptions( 'fasta|f=s' => \$fastaDB,
-            'map|m=s'   => \$mapFile, );
+GetOptions(
+    'fasta|f=s' => \$fastaDB,
+    'map|m=s'   => \$mapFile,
+);
 
 my $refSeqID       = "";
-my $geneName       = "";
+my $geneName       = "Unknown";
 my $fastaSeq       = "";
 my $geneName_old   = "";
 my $refSeqID_old   = "";
@@ -54,11 +56,13 @@ if ( !$fastaDB ) {
     usage() and exit(1);
 }
 
-my $fastaFH = IO::File->new( $fastaDB, O_RDONLY | O_EXCL ) || die( $fastaDB . ": " . $! );
+my $fastaFH = IO::File->new( $fastaDB, O_RDONLY | O_EXCL )
+  || die( $fastaDB . ": " . $! );
 
 my $mapFH;
 if ($mapFile) {
-    $mapFH = IO::File->new( $mapFile, O_RDWR | O_CREAT | O_TRUNC ) || die( $mapFile . ": " . $! );
+    $mapFH = IO::File->new( $mapFile, O_RDWR | O_CREAT | O_TRUNC )
+      || die( $mapFile . ": " . $! );
 }
 else {
     open( $mapFH, ">-" );
@@ -67,36 +71,68 @@ else {
 while ( defined( my $fastaLine = $fastaFH->getline() ) ) {
 
 # refSeq fastaLine example:
+# old
 # >gi|568905436|ref|XM_006495550.1| PREDICTED: Mus musculus X Kell blood group precursor related family member 4 (Xkr4), transcript variant X1, mRNA
+# new
+# >NR_046233.2 Mus musculus 45S pre-ribosomal RNA (Rn45s), ribosomal RNA
 
     chomp($fastaLine);
     if ( $fastaLine =~ /^\>/ ) {
-        my @fields = split( '\|', $fastaLine );
 
-        if (    ( $fields[0] ne '>gi' )
-             || ( $fields[1] !~ /\d+/ )
-             || ( $fields[2] ne 'ref' )
-             || ( $fields[3] !~ /(XM|NM|NR|XR)(_)(\d+)(\.)(\d+)/ ) )
-        {
-            say STDERR "Skipping: unknown refSeq fasta header: " . $fastaLine;
-            next;
+        if ( $fastaLine =~ /^\>gi/ ) {
+            my @fields = split( '\|', $fastaLine );
+
+            if (   ( $fields[0] ne '>gi' )
+                || ( $fields[1] !~ /\d+/ )
+                || ( $fields[2] ne 'ref' )
+                || ( $fields[3] !~ /(XM|NM|NR|XR)(_)(\d+)(\.)(\d+)/ ) )
+            {
+                say STDERR "Skipping: unknown refSeq fasta header: "
+                  . $fastaLine;
+                next;
+            }
+
+            my $desc = $fields[4];
+            $desc =~ /(.+\()(.+)(\).+)/;
+            $geneName = $2 if ( defined($2) );
+
+        }
+        elsif ( $fastaLine =~ /^(\>)(XM|NM|NR|XR)(_)(\d+)(\.)(\d+)/ ) {
+
+            my @fields = split( '\s', $fastaLine );
+
+            if ( $fields[0] !~ /^(\>)(XM|NM|NR|XR)(_)(\d+)(\.)(\d+)/ ) {
+                say STDERR "Skipping: unknown refSeq fasta header: "
+                  . $fastaLine;
+                next;
+            }
+
+            my $desc = "";
+            if ( $fields[0] =~ /^\>gi/ ) {
+
+            }
+            else {
+                foreach my $f (@fields) {
+                    if ( $f =~ /^\(.+\)\,$/ ) {
+                        $desc = $f;
+                        $desc =~ /(\()(.+)(\)\,)/;
+                        $geneName = $2 if ( defined($2) );
+                    }
+                }
+            }
         }
 
-        $refSeqID = substr( ( split( ' ', $fastaLine ) )[0], 1 );
-
-        $geneName = 'Unknown';
-
-        my $desc = $fields[4];
-        $desc =~ /(.+\()(.+)(\).+)/;
-        $geneName = $2 if ( defined($2) );
-
+        $refSeqID       = substr( ( split( ' ', $fastaLine ) )[0], 1 );
         $geneLength_old = length($fastaSeq);
 
         if ( $geneLength_old != 0 ) {
             $fastaSeq                          = "";
             $idHash{$refSeqID_old}{'geneName'} = $geneName_old;
             $idHash{$refSeqID_old}{'length'}   = $geneLength_old;
-            $mapFH->print( $refSeqID_old . "\t" . $geneName_old . "\t" . $geneLength_old . "\n" );
+            $mapFH->print( $refSeqID_old . "\t"
+                  . $geneName_old . "\t"
+                  . $geneLength_old
+                  . "\n" );
         }
     }
     else {
@@ -114,10 +150,10 @@ if ( $geneLength_old != 0 ) {
     $fastaSeq                          = "";
     $idHash{$refSeqID_old}{'geneName'} = $geneName_old;
     $idHash{$refSeqID_old}{'length'}   = $geneLength_old;
-    $mapFH->print( $refSeqID_old . "\t" . $geneName_old . "\t" . $geneLength_old . "\n" );
+    $mapFH->print(
+        $refSeqID_old . "\t" . $geneName_old . "\t" . $geneLength_old . "\n" );
 }
 $mapFH->close();
-
 
 undef($mapFH);
 undef($fastaFH);
@@ -125,7 +161,7 @@ undef($fastaFH);
 sub usage {
     my $self = basename($0);
 
-    print STDERR<<EOF
+    print STDERR<<EOF;
 mkRefSeq2GeneMap.pl creates a RefSeq-ID to gene name (offical Gene Symbol) map file with transcript length
 information in the following format:
 

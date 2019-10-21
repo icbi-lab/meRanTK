@@ -57,8 +57,9 @@ SOFTWARE REQUIREMENTS:
 	    2.4.0k,
 	    2.2.4a,
 	    2.5.0c,
-	    2.5.2.a, (pre compiled binary for 64bit Linux is included in meRanTK)
-	    2.5.2.b
+	    2.5.2a, (pre compiled binary for 64bit Linux is included in meRanTK)
+	    2.5.2b
+	    2.6.1d
 
     - HiSat2  http://ccb.jhu.edu/software/hisat2/index.shtml
       2.0.4 (pre compiled binary for 64bit Linux is included in meRanTK)

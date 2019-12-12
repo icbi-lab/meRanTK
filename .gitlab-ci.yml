@@ -1,0 +1,6 @@
+before_script:
+  - yum install perl
+
+run-test:
+  script:
+    - perl --version

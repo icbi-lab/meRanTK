@@ -6,7 +6,6 @@ before_script:
   - apt-get install -y libgd-text-perl
   - apt-get install -y libgd-graph-perl
   - apt-get install -y libmce-perl
-  - apt-get install -y cpan
   - cpan Math::CDF
   - cpan Text::NSP::Measures::2D::Fisher::twotailed
 

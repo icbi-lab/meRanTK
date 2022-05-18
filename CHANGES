@@ -1,3 +1,14 @@
+2022/05/18
+-Version 1.3.0
+  - meRanCall:
+    Implement C-cutoff filter. Removes reads from poor conversion
+    in the sense that if a read has more than C_cutoff Cs it will
+    not be considered in m5C calling.
+    Implement signal to noise ratio filter. Only consider sites
+    that have a SNR higher than signalToNoise
+    Implement a minimum C filter. Only consider sites that hav a
+    minimum of minC Cs.
+  - minor fixes
 2019/04/08
 -Version 1.2.1b
   - meRanGh,meRanGs, meRanT:

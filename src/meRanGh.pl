@@ -24,6 +24,7 @@
 
 use strict;
 use warnings;
+use v5.18;
 
 use Pod::Usage;
 use Config;
@@ -332,10 +333,11 @@ else {
 # see how we are called
 my $runMode = shift;
 
+say $VERSION and exit(0) if ($version);
+
 usage() and exit(0) if ( !$runMode );
 usage() and exit(0) if ( $help && !$runMode );
 pod2usage( -verbose => 2 ) if $man;
-say $VERSION and exit(0) if ($version);
 
 if ( !defined($runMode) ) {
     say STDERR "ERROR: No runMode specified!";
@@ -3119,7 +3121,21 @@ sub filterPEalignments {
                  && ( !defined($allowDoveTail) ) )
           )
         {
-            &$debug( $sortedPairedAlignment->[0]->[0] . " : " . $sortedPairedAlignment->[1]->[0] . " map discordantly",
+            &$debug( $sortedPairedAlignment->[0]->[0]
+                     . " " 
+                     . $sortedPairedAlignment->[0]->[1] 
+                     . " " 
+                     . $sortedPairedAlignment->[0]->[2] 
+                     . ":" 
+                     . $sortedPairedAlignment->[0]->[3] 
+                     . " <-> " . $sortedPairedAlignment->[1]->[0] 
+                     . " " 
+                     . $sortedPairedAlignment->[1]->[1] 
+                     . " " 
+                     . $sortedPairedAlignment->[1]->[2] 
+                     . ":" 
+                     . $sortedPairedAlignment->[1]->[3] 
+                     . " map discordantly",
                      "Line:", __LINE__ );
             $mappingStatsC{discordantAL} += 2;
             next;
@@ -3195,7 +3211,21 @@ sub filterPEalignments {
                  && ( !defined($allowDoveTail) ) )
           )
         {
-            &$debug( $sortedPairedAlignment->[0]->[0] . " : " . $sortedPairedAlignment->[1]->[0] . " map discordantly",
+            &$debug( $sortedPairedAlignment->[0]->[0]
+                     . " " 
+                     . $sortedPairedAlignment->[0]->[1] 
+                     . " " 
+                     . $sortedPairedAlignment->[0]->[2] 
+                     . ":" 
+                     . $sortedPairedAlignment->[0]->[3] 
+                     . " <-> " . $sortedPairedAlignment->[1]->[0] 
+                     . " " 
+                     . $sortedPairedAlignment->[1]->[1] 
+                     . " " 
+                     . $sortedPairedAlignment->[1]->[2] 
+                     . ":" 
+                     . $sortedPairedAlignment->[1]->[3] 
+                     . " map discordantly",
                      "Line:", __LINE__ );
             $mappingStatsC{discordantAL} += 2;
             next;

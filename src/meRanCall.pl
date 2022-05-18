@@ -25,6 +25,8 @@
 use strict;
 use warnings;
 
+use v5.18;
+
 use Pod::Usage;
 use Bio::DB::Sam;
 use List::Util qw( reduce sum min max );
@@ -63,11 +65,14 @@ my $rskip5          = 0;
 my $rskip3          = 0;
 my $oriReadLen      = 100;
 my $readDir         = "fr";
+my $C_cutoff        = 3;
 my $minMethRate     = 0.2;
 my $minMutRate      = 0.8;
 my $minBaseQ        = 30;
 my $qsOffset        = 33;
-my $minCov          = 10;
+my $minCov          = 20;
+my $minC            = 3;
+my $snr             = 0.9;
 my $maxDuplicates   = 0;
 my $errorInterval   = 0;
 my $conversionRate;
@@ -102,10 +107,13 @@ GetOptions(
             'QSoffset|qso=i'         => \$qsOffset,
             'readLength|rl=i'        => \$oriReadLen,
             'readDir|rd=s'           => \$readDir,
+            'C_cutoff|Cco=i'         => \$C_cutoff,
             'minMethR|mr=f'          => \$minMethRate,
             'minMutR|mutR=f'         => \$minMutRate,
             'minBaseQ|mBQ=i'         => \$minBaseQ,
             'minCov|mcov=i'          => \$minCov,
+            'minC|mc=i'              => \$minC,
+            'signalToNoise|snr=f'    => \$snr,
             'maxDup|md=i'            => \$maxDuplicates,
             'fisherTest|fet'         => \$fisherTest,
             'fdr=f'                  => \$FDR,
@@ -176,10 +184,11 @@ my $BASELINE_ERR = 10**(-$minBaseQ/10);
 
 my $meth_caller = \&meth_caller;
 
+say $VERSION and exit(0) if ($version);
+
 usage() and exit(0) if ($help);
 pod2usage( -verbose => 3 ) if $man;
 
-say $VERSION and exit(0) if ($version);
 
 if ( ( $minMethRate > 1 ) ) {
     say STDERR "ERROR: min methlyation rate should be 0 < mr <= 1 ";
@@ -705,10 +714,10 @@ sub meth_caller {
 
     return unless $pos >= $start && $pos <= $end;
 
-    my $total = 0;
+    my %cov_total;
 
     if (@$p) {
-        $total = 0;
+        %cov_total = ();
 
         ( $refbase, $context ) = getRefSeq( $sam, $seqid, $pos, $seqContext );
 
@@ -853,10 +862,17 @@ sub meth_caller {
 
             my $qscore = $a->qscore->[ $pileup->qpos ];
             &$debug( "QS: ", $qscore );
-            next unless ( defined($qscore) && ( ( $qscore - $qsOffset ) >= $minBaseQ ) );
+
+            my $read_Ccount = ($strand eq "+") ? uc($a->qseq) =~ tr/C// : uc($a->qseq) =~ tr/G//;
+            &$debug( "Cs: ", $read_Ccount, " : ", $strand, " : " , uc($a->qseq) );
+
+            $cov_total{$strand}++;
+
+            next unless ( defined($qscore) && ( ( $qscore - $qsOffset ) >= $minBaseQ ) && ($read_Ccount < $C_cutoff) );
 
             $baseStrandCount{$strand}++;
             $baseCount->{$strand}->{$qbase}++;
+
 
         }    # end for @$p
 
@@ -866,12 +882,13 @@ sub meth_caller {
         $contextRev =~ tr/[ACGTacgt]/[TGCAtgca]/;
         my %strandRefbase = ( '+' => $refbase, '-' => $refbaseRev );
         my %strandContext = ( '+' => $context, '-' => $contextRev );
+
         foreach my $s ( keys(%baseStrandCount) ) {
 
             # debug("strand ", $s);
             if ( $baseStrandCount{$s} > 0 ) {
                 &$callMethStatus( $baseCount->{$s}, $s, $strandRefbase{$s}, $strandContext{$s}, $seqid, $pos,
-                                  $baseStrandCount{$s}, $geneName );
+                                  $baseStrandCount{$s}, $geneName, $cov_total{$s} );
             }
         }
     }
@@ -886,6 +903,7 @@ sub callMethStatus {
     my $pos       = shift;
     my $total     = shift;
     my $geneName  = shift;
+    my $cov_total = shift;
 
     my $m5Cs__ = \%m5Cs;
     my $m5Cs_  = $m5Cs__->{$strand};
@@ -905,7 +923,7 @@ sub callMethStatus {
     my $coverage = 0;
     my $reportMe = 0;
 
-    if ( $total >= $minCov ) {
+    if ( ( $total >= $minCov ) && ( $baseCount->{C} >= $minC ) && ( ($total / $cov_total) > $snr ) ) {
         my $maxCalledBase = reduce { $baseCount->{$a} > $baseCount->{$b} ? $a : $b } keys %{$baseCount};
         my @equalCalledBases = grep { $baseCount->{$_} eq $baseCount->{$maxCalledBase} } keys %{$baseCount};
         $maxCalledBase = join( '', ( sort(@equalCalledBases) ) );
@@ -1032,6 +1050,7 @@ sub callMethStatusAZA {
     my $pos       = shift;
     my $total     = shift;
     my $geneName  = shift;
+    my $cov_total = shift;
 
     my $m5Cs__ = \%m5Cs;
     my $m5Cs_  = $m5Cs__->{$strand};
@@ -1051,7 +1070,7 @@ sub callMethStatusAZA {
     my $coverage = 0;
     my $reportMe = 0;
 
-    if ( $total >= $minCov ) {
+    if ( ( $total >= $minCov ) && ( $baseCount->{G} >= $minC ) && ( ($total / $cov_total) > $snr ) ) {
         my $maxCalledBase = reduce { $baseCount->{$a} > $baseCount->{$b} ? $a : $b } keys %{$baseCount};
         my @equalCalledBases = grep { $baseCount->{$_} eq $baseCount->{$maxCalledBase} } keys %{$baseCount};
         $maxCalledBase = join( '', ( sort(@equalCalledBases) ) );
@@ -1827,7 +1846,15 @@ Options:
 
     -minCov|-mcov          : Minimum coverage at a given reference position above
                              which methylation calling will be performed.
-                             (default: 10)
+                             (default: 20)
+
+    -minC|-mc              : Minimum C count at a given reference position above
+                             which methylation calling will be performed.
+                             (default: 3)
+
+    -signalToNoise|-snr    : Only call m5Cs on position with minimum signal to noise
+                             ratio. (clean reads / reads before filtering)
+                             (default: 0.9)
 
     -maxDup|-md            : Maximum number of read duplicates covering a given
                              position. Read duplicates have the same start positon
@@ -1838,6 +1865,10 @@ Options:
                              state against background non conversion levels at the given
                              coverage.
                              (default: not set, default in future)
+
+    -C_cutoff|-Cco        :  C cutoff. Number of Cs per read, if this cutoff is exceeded
+                             the read will be ignored.
+                             (default: 3)
 
     -conversionRate|-cr    : C->T Conversion rate (0 < cr < 1)
                              (default: 1)

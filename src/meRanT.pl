@@ -25,6 +25,8 @@
 use strict;
 use warnings;
 
+use v5.24;
+
 use Pod::Usage;
 use Config;
 $Config{useithreads} or die('Recompile Perl with threads to run this program.');
@@ -195,10 +197,11 @@ my $bowtie2Version           = "";
 # see how we are called
 my $runMode = shift;
 
+say $VERSION and exit(0) if ($version);
+
 usage() and exit(0) if ( !$runMode );
 usage() and exit(0) if ( $help && !$runMode );
 pod2usage( -verbose => 2 ) if $man;
-say $VERSION and exit(0) if ($version);
 
 if ( !defined($runMode) ) {
     say STDERR "ERROR: No runMode specified!";

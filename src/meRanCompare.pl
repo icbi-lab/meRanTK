@@ -25,6 +25,8 @@
 use strict;
 use warnings;
 
+use v5.18;
+
 use Pod::Usage;
 
 use Getopt::Long qw(:config no_ignore_case no_auto_abbrev);

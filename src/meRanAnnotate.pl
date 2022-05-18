@@ -25,6 +25,8 @@ use strict;
 use warnings;
 use Carp;
 
+use v5.18;
+
 use Module::Load::Conditional qw(check_install);
 use Getopt::Long qw(:config no_ignore_case no_auto_abbrev);
 use Data::Dumper;
@@ -89,8 +91,9 @@ my %tabData;
 my %gff;
 my $header = "";
 
-usage() and exit(0) if ($help);
 say $VERSION and exit(0) if ($version);
+
+usage() and exit(0) if ($help);
 
 my $debug;
 if ($DEBUG) {

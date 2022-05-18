@@ -1,5 +1,13 @@
 before_script:
-  - yum install perl
+  - apt-get install libparallel-forkmanager-perl
+  - apt-get install libbio-samtools-perl
+  - apt-get install libgd-gd2-perl
+  - apt-get install libgd-text-perl
+  - apt-get install libgd-graph-perl
+  - apt-get install libmce-perl
+  - apt-get install cpan
+  - cpan Math::CDF
+  - cpan Text::NSP::Measures::2D::Fisher::twotailed
 
 run-test:
   script:

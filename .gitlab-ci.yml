@@ -1,12 +1,12 @@
 before_script:
   - apt-get update
-  - apt-get install libparallel-forkmanager-perl
-  - apt-get install libbio-samtools-perl
-  - apt-get install libgd-gd2-perl
-  - apt-get install libgd-text-perl
-  - apt-get install libgd-graph-perl
-  - apt-get install libmce-perl
-  - apt-get install cpan
+  - apt-get install -y libparallel-forkmanager-perl
+  - apt-get install -y libbio-samtools-perl
+  - apt-get install -y libgd-gd2-perl
+  - apt-get install -y libgd-text-perl
+  - apt-get install -y libgd-graph-perl
+  - apt-get install -y libmce-perl
+  - apt-get install -y cpan
   - cpan Math::CDF
   - cpan Text::NSP::Measures::2D::Fisher::twotailed
 

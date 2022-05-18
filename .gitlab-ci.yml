@@ -1,4 +1,5 @@
 before_script:
+  - apt-get update
   - apt-get install libparallel-forkmanager-perl
   - apt-get install libbio-samtools-perl
   - apt-get install libgd-gd2-perl

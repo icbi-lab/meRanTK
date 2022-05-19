@@ -33,6 +33,7 @@ $Config{useithreads} or die('Recompile Perl with threads to run this program.');
 use IO::File;
 use Fcntl qw(SEEK_END SEEK_SET SEEK_CUR);
 use File::Basename;
+use File::Path qw(mkpath);
 use Cwd qw(abs_path);
 use Getopt::Long qw(:config no_ignore_case no_auto_abbrev);
 use POSIX qw(mkfifo);
@@ -3356,7 +3357,8 @@ sub checkDir {
         exit(1);
     }
     else {
-        mkdir( $dir, 0755 ) || die( $dir . ": " . $! );
+        # mkdir( $dir, 0755 ) || die( $dir . ": " . $! );
+        mkpath( $dir , { chmod => 0755 } );
     }
 }
 

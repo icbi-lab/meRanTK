@@ -18,6 +18,10 @@ before_script:
   - export PATH=$PATH:./extutil/x86_64-linux-thread-multi/bowtie2:./extutil/x86_64-linux-thread-multi/fastq-sort:./extutil/x86_64-linux-thread-multi/hisat2:./extutil/x86_64-linux-thread-multi/STAR
 
 test:
+  artifacts:
+      paths:
+          - testdata/
+          - extutil/
   script:
     - perl --version
     - cp ./src/meRanT.pl .

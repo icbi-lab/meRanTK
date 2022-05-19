@@ -56,9 +56,7 @@ my $self               = basename( $0, () );
 my $instDir            = dirname( abs_path($0) );
 my $arch               = $Config{archname};
 my $extUtilDir         = $instDir . '/extutil/' . $arch;
-print STDERR $extUtilDir . "\n";
 my $useShippedExtUtils = ( -x $extUtilDir ) ? 1 : 0;
-print STDERR $useShippedExtUtils . "\n";
 
 my $max_threads = 1;
 my $fastQfwd    = "";
@@ -691,8 +689,6 @@ sub mkbsidx {
     chdir($bsIdxDir) || die( $bsIdxDir . ": " . $! );
 
     # fork the BOWTIE2 index builder processes
-    print STDOUT "\n" . $bowtie2buildcmd . "\n";
-    print STDERR "\n" . $bowtie2buildcmd . "\n";
     my $pid = open( my $IDXBUILD, "-|", $bowtie2buildcmd ) || die($!);
 
     say STDOUT "Indexing ... it may take a while to create: " . $idxName;

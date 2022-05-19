@@ -15,7 +15,6 @@ before_script:
   - apt-get install -y python
   - cpanm Math::CDF
   - cpanm Text::NSP::Measures::2D::Fisher::twotailed
-  - export PATH=$PATH:./extutil/x86_64-linux-thread-multi/bowtie2:./extutil/x86_64-linux-thread-multi/fastq-sort:./extutil/x86_64-linux-thread-multi/hisat2:./extutil/x86_64-linux-thread-multi/STAR
 
 test:
   artifacts:
@@ -32,7 +31,7 @@ test:
         ./meRanT.pl mkbsidx \
         -t 2 \
         -fa ./testdata/refSeq/mm10.refSeqRNA-noPRED.500.fa \
-        -id ./test/mm10/meRanTIDX/
+        -id ./testdata/mm10/meRanTIDX
     - |
         ./meRanT.pl align \
         -t 2 \

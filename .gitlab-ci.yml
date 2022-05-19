@@ -14,9 +14,10 @@ before_script:
   - apt-get install -y cpanminus
   - apt-get install -y make
   - apt-get install -y libpar-packer-perl
+  - apt-get install -y python
   - cpanm Math::CDF
   - cpanm Text::NSP::Measures::2D::Fisher::twotailed
-  - export PATH=$PATH:./extutil/x86_64-linux-thread-multi/bowtie2:extutil/x86_64-linux-thread-multi/fastq-sort:extutil/x86_64-linux-thread-multi/hisat2:extutil/x86_64-linux-thread-multi/STAR
+  - export PATH=$PATH:./extutil/x86_64-linux-thread-multi/bowtie2:./extutil/x86_64-linux-thread-multi/fastq-sort:./extutil/x86_64-linux-thread-multi/hisat2:./extutil/x86_64-linux-thread-multi/STAR
 
 test:
   stage: test

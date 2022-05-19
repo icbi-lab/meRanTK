@@ -1,7 +1,5 @@
 image: ubuntu:bionic
 
-stages:
-  - test
 before_script:
   - apt-get update
   - apt-get install -y libparallel-forkmanager-perl
@@ -20,7 +18,6 @@ before_script:
   - export PATH=$PATH:./extutil/x86_64-linux-thread-multi/bowtie2:./extutil/x86_64-linux-thread-multi/fastq-sort:./extutil/x86_64-linux-thread-multi/hisat2:./extutil/x86_64-linux-thread-multi/STAR
 
 test:
-  stage: test
   script:
     - perl --version
     - cp ./src/meRanT.pl .

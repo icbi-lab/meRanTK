@@ -32,7 +32,7 @@ test:
         ./meRanT.pl mkbsidx \
         -t 2 \
         -fa ./testdata/refSeq/mm10.refSeqRNA-noPRED.500.fa \
-        -id ./testdata/mm10/meRanTIDX/
+        -id ./test/mm10/meRanTIDX/
     - |
         ./meRanT.pl align \
         -t 2 \

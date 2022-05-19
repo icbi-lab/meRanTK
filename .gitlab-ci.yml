@@ -1,3 +1,5 @@
+stages:
+  - test
 before_script:
   - apt-get update
   - apt-get install -y libparallel-forkmanager-perl
@@ -13,7 +15,8 @@ before_script:
   - cpanm Math::CDF
   - cpanm Text::NSP::Measures::2D::Fisher::twotailed
 
-run-test:
+test:
+  stage: test
   script:
     - perl --version
     - cp ./src/meRanT.pl .
@@ -99,12 +102,12 @@ run-test:
         -mBQ 30 \
         -bed63 \
         -sc 5
-    | -
+    - |
         ./meRanGh.pl mkbsidx  \
         -t 2 \
         -fa ./testdata/mm10/chr19.fa \
         -id ./testdata/mm10/meRanGhIDX
-    | -
+    - |
         ./meRanGh.pl align \
         -t 2 \
         -f ./testdata/fastq/clean_KHOD_400k_test.fastq \
@@ -114,7 +117,7 @@ run-test:
         -S meRanGh_test.sam \
         -MM \
         -un
-    | -
+    - |
         ./meRanCall.pl \
         -p 2 \
         -s ./testdata/results/meRanGh_test_sorted.bam \

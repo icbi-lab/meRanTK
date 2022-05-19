@@ -1,6 +1,5 @@
-#!/usr/local/bioinf/perl/perl-5.24.0/bin/perl -w
-##!/usr/bin/env perl
-#/usr/local/bioinf/perl/perl-5.18.2/bin/perl -w
+#!/usr/bin/env perl
+#/usr/local/bioinf/perl/perl-5.24.0/bin/perl -w
 #
 #  meRanCall.pl
 #

@@ -56,7 +56,9 @@ my $self               = basename( $0, () );
 my $instDir            = dirname( abs_path($0) );
 my $arch               = $Config{archname};
 my $extUtilDir         = $instDir . '/extutil/' . $arch;
+print STDERR $extUtilDir . "\n";
 my $useShippedExtUtils = ( -x $extUtilDir ) ? 1 : 0;
+print STDERR $useShippedExtUtils . "\n";
 
 my $max_threads = 1;
 my $fastQfwd    = "";
@@ -3357,7 +3359,6 @@ sub checkDir {
         exit(1);
     }
     else {
-        # mkdir( $dir, 0755 ) || die( $dir . ": " . $! );
         mkpath( $dir , { chmod => 0755 } );
     }
 }

@@ -19,8 +19,7 @@ before_script:
 test:
   artifacts:
       paths:
-          - testdata/
-          - extutil/
+          - testdata/results/
   script:
     - perl --version
     - cp ./src/meRanT.pl .

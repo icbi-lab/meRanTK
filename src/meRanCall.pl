@@ -29,8 +29,10 @@ use v5.18;
 use Pod::Usage;
 use Bio::DB::Sam;
 use List::Util qw( reduce sum min max );
+use List::MoreUtils::XS qw(lower_bound);
 use IO::File;
 use File::Basename;
+use IO::Zlib;
 
 use Parallel::ForkManager;
 
@@ -54,26 +56,26 @@ my $version;
 my $help;
 my $man;
 
-my $samInFile       = "";
-my $resOutFile      = "";
-my $fastaInFile     = "";
-my $procs           = 1;
-my $fskip5          = 0;
-my $fskip3          = 0;
-my $rskip5          = 0;
-my $rskip3          = 0;
-my $oriReadLen      = 100;
-my $readDir         = "fr";
-my $C_cutoff        = 3;
-my $minMethRate     = 0.2;
-my $minMutRate      = 0.8;
-my $minBaseQ        = 30;
-my $qsOffset        = 33;
-my $minCov          = 20;
-my $minC            = 3;
-my $snr             = 0.9;
-my $maxDuplicates   = 0;
-my $errorInterval   = 0;
+my $samInFile     = "";
+my $resOutFile    = "";
+my $fastaInFile   = "";
+my $procs         = 1;
+my $fskip5        = 0;
+my $fskip3        = 0;
+my $rskip5        = 0;
+my $rskip3        = 0;
+my $oriReadLen    = 100;
+my $readDir       = "fr";
+my $C_cutoff      = 3;
+my $minMethRate   = 0.2;
+my $minMutRate    = 0.8;
+my $minBaseQ      = 30;
+my $qsOffset      = 33;
+my $minCov        = 20;
+my $minC          = 3;
+my $snr           = 0.9;
+my $maxDuplicates = 0;
+my $errorInterval = 0;
 my $conversionRate;
 my $reportUP        = "";    # report mutation but unmethylated
 my $genomeDBref     = "";    # we handle mappings to a nondirected DB (e.g. genomic)
@@ -83,10 +85,12 @@ my $seqContext;
 my $narrowPeak;
 my $bed63;
 my $bedFileIN;
+my $gtfFile;
 my $chrPrefix;
 my $FDR;
 my $FDRrate;
 my $calculateConvR;
+my $useGeneCR;
 my @controlSeqIDs;
 my @exTargets;
 my $azaMode;
@@ -98,6 +102,7 @@ GetOptions(
             'procs|p=i'              => \$procs,
             'result|o=s'             => \$resOutFile,
             'regions|bi=s'           => \$bedFileIN,
+            'gtf=s'                  => \$gtfFile,
             'chrRrefix|cpf=s'        => \$chrPrefix,
             'fskip5|fs5=i'           => \$fskip5,
             'fskip3|fs3=i'           => \$fskip3,
@@ -119,6 +124,7 @@ GetOptions(
             'fdrRate'                => \$FDRrate,
             'conversionRate|cr=f'    => \$conversionRate,
             'calcConvRate|ccr'       => \$calculateConvR,
+            'geneConvRate|gcr'       => \$useGeneCR,
             'controlSeqID|cSeqID=s'  => \@controlSeqIDs,
             'excludeSeqID|exSeqID=s' => \@exTargets,
             'errorInterval|ei=f'     => \$errorInterval,
@@ -154,9 +160,10 @@ else {
     $callMethStatus = \&callMethStatus;
     $conversionRate = ($conversionRate) ? $conversionRate : -1;
 }
-if ( ($conversionRate == -1) && (!$calculateConvR) ) {
+if ( ( $conversionRate == -1 ) && ( !$calculateConvR ) ) {
     if ($FDR) {
-        say STDERR "WARNING: No conversion rate: p-value for methylation state will be calculate only based on the expected sequencing error";
+        say STDERR
+"WARNING: No conversion rate: p-value for methylation state will be calculate only based on the expected sequencing error";
     }
 }
 
@@ -177,17 +184,19 @@ my $FDRbed63FH;
 my $FDRbednpFH;
 my %regionData;
 my $regionCount = 0;
+my %gtf;
+my %geneCR;
 
 # set baseline sequencing error
-my $BASELINE_ERR = 10**(-$minBaseQ/10);
+my $BASELINE_ERR = 10**( -$minBaseQ / 10 );
 
 my $meth_caller = \&meth_caller;
+my $call_geneCR = \&call_geneCR;
 
 say $VERSION and exit(0) if ($version);
 
 usage() and exit(0) if ($help);
 pod2usage( -verbose => 3 ) if $man;
-
 
 if ( ( $minMethRate > 1 ) ) {
     say STDERR "ERROR: min methlyation rate should be 0 < mr <= 1 ";
@@ -335,7 +344,7 @@ if ( defined( $targets[0] ) ) {
           . "\n\nPlease provide the fasta file that was used for mapping the reads.";
         exit(1);
     }
-    
+
     my $refLen = getRefLengths($faidxFile);
 
     foreach my $seqid (@targets) {
@@ -365,7 +374,7 @@ if ( !-r $baidxFile ) {
     }
 }
 
-if ( $bedFileIN ) {
+if ($bedFileIN) {
     readBED( $bedFileIN, \%regionData, $regionCount, $chrPrefix );
 }
 
@@ -384,7 +393,7 @@ $resFH = IO::File->new( $resOutFile, O_RDWR | O_CREAT | O_TRUNC )
 
 if ($FDR) {
     ( $fname, $fpath, $fsuffix ) = fileparse( $resOutFile, qr/\.[^.]*$/ );
-    $fdrRESoutFile = nicePath($fpath . "/" . $fname . "_FDR_" . $FDR . ".txt");
+    $fdrRESoutFile = nicePath( $fpath . "/" . $fname . "_FDR_" . $FDR . ".txt" );
     $FDRresFH = IO::File->new( $fdrRESoutFile, O_RDWR | O_CREAT | O_TRUNC )
       || die( "Can not create the FDR contolled result file: " . $fdrRESoutFile . " : " . $! );
 }
@@ -413,23 +422,23 @@ if ($genomeDBref) {
 
         my ( $fname, $fpath, $fsuffix ) = fileparse( $resOutFile, qr/\.[^.]*$/ );
         if ($bed63) {
-            $bed63File = nicePath($fpath . "/" . $fname . ".bed");
+            $bed63File = nicePath( $fpath . "/" . $fname . ".bed" );
             $bed63FH = IO::File->new( $bed63File, O_RDWR | O_CREAT | O_TRUNC )
               || die( "Can not create the BED6+3 file: " . $bed63File . ": " . $! );
 
             if ($FDR) {
-                $FDRbed63File = nicePath($fpath . "/" . $fname . "_FDR_" . $FDR . ".bed");
+                $FDRbed63File = nicePath( $fpath . "/" . $fname . "_FDR_" . $FDR . ".bed" );
                 $FDRbed63FH = IO::File->new( $FDRbed63File, O_RDWR | O_CREAT | O_TRUNC )
                   || die( "Can not create the FDR contolled BED6+3 file: " . $FDRbed63File . " : " . $! );
             }
         }
         if ($narrowPeak) {
-            $bednpFile = nicePath($fpath . "/" . $fname . "_narrowPeak.bed");
+            $bednpFile = nicePath( $fpath . "/" . $fname . "_narrowPeak.bed" );
             $bednpFH = IO::File->new( $bednpFile, O_RDWR | O_CREAT | O_TRUNC )
               || die( "Can not create the narrowPeak BED file: " . $bednpFile . ": " . $! );
 
             if ($FDR) {
-                $FDRbednpFile = nicePath($fpath . "/" . $fname . "_FDR_" . $FDR . "_narrowPeak.bed");
+                $FDRbednpFile = nicePath( $fpath . "/" . $fname . "_FDR_" . $FDR . "_narrowPeak.bed" );
                 $FDRbednpFH = IO::File->new( $FDRbednpFile, O_RDWR | O_CREAT | O_TRUNC )
                   || die( "Can not create the FDR contolled narrowPeak BED file: " . $FDRbednpFile . " : " . $! );
             }
@@ -452,9 +461,6 @@ else {
 }
 
 ####### Let the fun begin #######
-my $MAX_PROCESSES = $procs;
-my $pm = new Parallel::ForkManager( $MAX_PROCESSES, "/dev/shm" );
-
 my $count              = 0;
 my $totalMethRefCs     = 0;
 my $totalMutMethCs     = 0;
@@ -467,7 +473,7 @@ my $methCTanalyzed     = 0;
 my $methCanalyzed      = 0;
 my $totalFilteredDups  = 0;
 my $m5Cnr              = 0;
-my $nrOftargets        = ( $bedFileIN ) ? $regionCount : scalar @targets;
+my $nrOftargets        = ($bedFileIN) ? $regionCount : scalar @targets;
 my $totpctDone         = 0;
 my $seqpctDone         = 0;
 my $end                = 0;
@@ -477,10 +483,14 @@ my $halfminCov         = ( $minCov * 0.5 );
 my $fetMinSuccess      = $minMethRate * $minCov;
 my $fetMaxFail         = 10 - $fetMinSuccess;
 my $resNr              = 0;
+my $MAX_PROCESSES      = $procs;
+my $wSid;
 my @fdrData;
+my $REGIONSIZE;
+my %sortedGeneStarts;
 
 print "Working on: " . $samInFile . "\n";
-if ( ! $bedFileIN ) {
+if ( !$bedFileIN ) {
     print "No region BED file specified: calling m5Cs on entire alignment file: " . $samInFile . " ...\n";
 }
 else {
@@ -492,7 +502,8 @@ print "Starting to process: " . $nrOftargets . " targets on " . $procs . " CPUs 
 my $headerLine = "\#"
   . join( "\t",
           qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate score seqContext geneName candidateName)
-          ) . "\n";
+  )
+  . "\n";
 $resFH->print($headerLine) unless ($calculateConvR);
 
 if ($FDR) {
@@ -500,43 +511,107 @@ if ($FDR) {
         $headerLine = "\#"
           . join( "\t",
                   qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate p-value_mState_adj score seqContext geneName candidateName)
-                  ) . "\n";
+          )
+          . "\n";
     }
     else {
         $headerLine = "\#"
           . join( "\t",
                   qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate p-value_mRate_adj score seqContext geneName candidateName)
-                  ) . "\n";
+          )
+          . "\n";
     }
 
     $FDRresFH->print($headerLine);
 }
 
-# run parallel jobs
-$pm->run_on_finish( \&resultCollector );
-$pm->run_on_wait( \&tellStatus, 0.5 )  unless ( $bedFileIN );
+# Caclulate conversion rate over genes from GTF to use it in a gene specific manner
+if ($useGeneCR) {
+    if ( !-r $gtfFile ) {
+        say STDERR "ERROR: Can not use gene conversion rate w/o GTF file: please provide -gtf <gtffile> option";
+        exit(1);
+    }
 
-my $wSid;
-my $REGIONSIZE;
+    readGTF( $gtfFile, \%gtf );
 
-if ( ! $bedFileIN ) {
-    foreach my $seqid (@targets) {
-    
+    foreach my $seqid ( keys %gtf ) {
+        @{ $sortedGeneStarts{$seqid}->{'+'} } = sort { $a <=> $b } keys %{ $gtf{$seqid}->{'+'} };
+        @{ $sortedGeneStarts{$seqid}->{'-'} } = sort { $a <=> $b } keys %{ $gtf{$seqid}->{'-'} };
+    }
+
+    my $pmCR = new Parallel::ForkManager( $MAX_PROCESSES, "/dev/shm" );
+    $pmCR->run_on_finish( \&geneCRcollector );
+
+    foreach my $seqid ( keys(%gtf) ) {
+        next if ( !grep( /^$seqid$/, @targets ) );
+
         $wSid = $seqid;
 
-        next if (grep /^$seqid$/, @exTargets);
-        
+        foreach my $strand ( keys %{ $gtf{$seqid} } ) {
+            foreach my $geneStart ( keys %{ $gtf{$seqid}->{$strand} } ) {
+                my $rec    = $gtf{$seqid}->{$strand}->{$geneStart};
+                my $region = $seqid . ":" . $rec->{range}->[0] . "-" . $rec->{range}->[0];
+                &$debug($region);
+
+                printf( "\nCalculating CR of: %s ", $rec->{gene_id} );
+
+                $end   = $rec->{range}->[1];
+                $start = $rec->{range}->[0];
+
+                my $sregion = $seqid . ":" . $start . "-" . $end;
+                my $pid = $pmCR->start( $rec->{gene_id} ) and next;
+
+                $sam->clone;
+
+                $sam->fast_pileup( $sregion, $call_geneCR );
+
+                $pmCR->finish( 0, \%geneCR );
+
+            }
+        }
+    }
+
+    $gtf{intergenic}->{0}->{m_rate} =
+      ( scalar @{ $gtf{intergenic}->{'+'}->{0}->{m_rates} } + scalar @{ $gtf{intergenic}->{'-'}->{0}->{m_rates} } != 0 )
+      ? ( sum( @{ $gtf{intergenic}->{'+'}->{0}->{m_rates} } ) + sum( @{ $gtf{intergenic}->{'-'}->{0}->{m_rates} } ) ) /
+      ( scalar @{ $gtf{intergenic}->{'+'}->{0}->{m_rates} } + scalar @{ $gtf{intergenic}->{'-'}->{0}->{m_rates} } )
+      : 0;
+    $gtf{intergenic}->{0}->{C_count} =
+      $gtf{intergenic}->{'+'}->{0}->{C_count} + $gtf{intergenic}->{'-'}->{0}->{C_count};
+    $gtf{intergenic}->{0}->{CT_count} =
+      $gtf{intergenic}->{'+'}->{0}->{CT_count} + $gtf{intergenic}->{'-'}->{0}->{CT_count};
+    $gtf{intergenic}->{0}->{m_rate_g} =
+      ( $gtf{intergenic}->{0}->{CT_count} != 0 )
+      ? $gtf{intergenic}->{0}->{C_count} / $gtf{intergenic}->{0}->{CT_count}
+      : 0;
+    delete( $gtf{intergenic}->{'+'} );
+    delete( $gtf{intergenic}->{'-'} );
+}
+
+# initialize parallel jobs
+my $pm = new Parallel::ForkManager( $MAX_PROCESSES, "/dev/shm" );
+
+$pm->run_on_finish( \&resultCollector );
+$pm->run_on_wait( \&tellStatus, 0.5 ) unless ($bedFileIN);
+
+if ( !$bedFileIN ) {
+    foreach my $seqid (@targets) {
+
+        $wSid = $seqid;
+
+        next if ( grep /^$seqid$/, @exTargets );
+
         printf( "processing %i sequences: \[%s - %02.2f%%\] [overall - %02.2f%%] done ...\r",
                 $nrOftargets, $wSid, $seqpctDone, $totpctDone );
-    
+
         $tlength = $sam->length($seqid);
         $REGIONSIZE = ( $tlength <= REGIONSIZE ) ? $tlength : REGIONSIZE;
-    
+
         $end   = 0;
         $start = -1 * $REGIONSIZE + 1;
-    
+
         while ( $end < $tlength ) {
-    
+
             $start += $REGIONSIZE;
             $end = ( ( $end + $REGIONSIZE ) > $tlength ) ? $tlength : ( $end + $REGIONSIZE );
             my $region = $seqid . ":" . $start . "-" . $end;
@@ -547,52 +622,52 @@ if ( ! $bedFileIN ) {
             $sam->fast_pileup( $region, $meth_caller );
 
             $pm->finish( 0, \%m5Cs );
-    
+
         }
         $totpctDone = ++$count * 100 / $nrOftargets;
     }
 }
 else {
- 
+
     foreach my $seqid ( keys(%regionData) ) {
-        next if ( ! grep( /^$seqid$/, @targets ) );
-        next if (grep /^$seqid$/, @exTargets);
+        next if ( !grep( /^$seqid$/, @targets ) );
+        next if ( grep /^$seqid$/, @exTargets );
 
         $wSid = $seqid;
-                
+
         foreach my $range ( @{ $regionData{$seqid}->{range} } ) {
-            
+
             my $region = $seqid . ":" . $range->[0] . "-" . $range->[1];
             &$debug($region);
 
-            printf( "\nWorking on: %s ", $region);
- 
+            printf( "\nWorking on: %s ", $region );
+
             $tlength = $range->[1] - $range->[0];
             $REGIONSIZE = ( $tlength <= REGIONSIZE ) ? $tlength : REGIONSIZE;
 
             $end   = $range->[0];
             $start = $range->[0] - $REGIONSIZE;
-    
+
             while ( $end < $range->[1] ) {
-    
+
                 $start += $REGIONSIZE;
                 $end = ( ( $end + $REGIONSIZE ) > $range->[1] ) ? $range->[1] : ( $end + $REGIONSIZE );
                 my $sregion = $seqid . ":" . $start . "-" . $end;
-                printf( "...\n\t... subregion: %s ", $sregion) unless ( ($start == $range->[0]) && ($end == $range->[1]) );
+                printf( "...\n\t... subregion: %s ", $sregion )
+                  unless ( ( $start == $range->[0] ) && ( $end == $range->[1] ) );
 
                 my $pid = $pm->start($seqid) and next;
                 $sam->clone;
-        
+
                 $sam->fast_pileup( $sregion, $meth_caller );
-        
-                $pm->finish( 0, \%m5Cs );    
+
+                $pm->finish( 0, \%m5Cs );
             }
 
-            
         }
-        
+
         $totpctDone = ++$count * 100 / $nrOftargets;
-    }    
+    }
 }
 $pm->wait_all_children;
 $resFH->close() unless ($calculateConvR);
@@ -610,15 +685,15 @@ if ($FDR) {
         foreach my $record (@$fdrResults) {
 
             my @resFields = split( '\t', $record->[2] );
-            my $pv_adj_nice = sprintf( "%01.6e", $record->[1]);
+            my $pv_adj_nice = sprintf( "%01.6e", $record->[1] );
             splice( @resFields, 16, 0, $pv_adj_nice );
 
             my $resLine = join( "\t", @resFields );
             $FDRresFH->print($resLine);
 
             # remove newline from m5C name, coming form orignal result line
-            chomp($resFields[20]);
-            
+            chomp( $resFields[20] );
+
             if ($narrowPeak) {
                 &$bedwriter( $resFields[0],  $resFields[1], $resFields[20], $resFields[2], $resFields[6],
                              $resFields[14], $resFields[4], $resFields[17], 64,            $FDRbednpFH );
@@ -668,17 +743,20 @@ Total duplicate reads filtered:\t" . $totalFilteredDups . "
 
 Total analyzed Cs on reference:\t" . $totalRefCsanalyzed . "
 Total analyzed methylated Cs ("
-  . (($azaMode) ? (">= " . ($minMethRate * 100)) : (( "<= " . ( 1 - $minMethRate ) * 100 ))) . "% " . (($azaMode) ? ("C->G") : ("C->T")) . " conversion) on reference:\t" . $totalMethRefCs . "
-Total analyzed " . (($azaMode) ? "converted" : "unconverted") . " Cs from queries:\t" . $methCanalyzed . "
-Total analyzed " . (($azaMode) ? "converted" : "unconverted") . " Cs from mutation:\t" . $totalMutMethCs . "
-Total analyzed C to " . (($azaMode) ? "G" : "T") . " conversion rate:\t" . $totalConvRate_analyzed . "
+  . ( ($azaMode) ? ( ">= " . ( $minMethRate * 100 ) ) : ( ( "<= " . ( 1 - $minMethRate ) * 100 ) ) ) . "% "
+  . ( ($azaMode) ? ("C->G") : ("C->T") )
+  . " conversion) on reference:\t"
+  . $totalMethRefCs . "
+Total analyzed " .      ( ($azaMode) ? "converted" : "unconverted" ) . " Cs from queries:\t" . $methCanalyzed . "
+Total analyzed " .      ( ($azaMode) ? "converted" : "unconverted" ) . " Cs from mutation:\t" . $totalMutMethCs . "
+Total analyzed C to " . ( ($azaMode) ? "G"         : "T" ) . " conversion rate:\t" . $totalConvRate_analyzed . "
 
 
 Summary over all Cs:
 
 Total Cs on reference covered by seq data:\t" . $totalRefCs . "
-Total Cs from queries " . (($azaMode) ? "converted" : "unconverted") . ":\t" . $methC . "
-Total C to " . (($azaMode) ? "G" : "T") . " conversion rate estimated:\t" . $totalConvRate_estimated . "
+Total Cs from queries " . ( ($azaMode) ? "converted" : "unconverted" ) . ":\t" . $methC . "
+Total C to " . ( ($azaMode) ? "G" : "T" ) . " conversion rate estimated:\t" . $totalConvRate_estimated . "
 
 Result file: " . $resOutFile . "\n";
 
@@ -701,118 +779,121 @@ print STDOUT "\n";
 
 #### Subroutines #####
 
-sub meth_caller {
-    my ( $seqid, $pos, $p ) = @_;
-    my $refbase;
-    my $context;
-    my $geneName;
-    my %baseCount_;    #= (A => 0, C => 0, T => 0, G => 0, N => 0);
-    my $baseCount = \%baseCount_;
-    my %baseStrandCount;
-    my %readMapStart = ();
+sub analyzePileup {
+    my ( $seqid, $pos, $p, $refbase ) = @_;
 
-    return unless $pos >= $start && $pos <= $end;
+    my $geneName        = "-";
+    my %readMapStart    = ();
+    my %mateOverlap     = ();
+    my %cov_total       = ();
+    my %baseCount       = ();    #= (A => 0, C => 0, T => 0, G => 0, N => 0);
+    my %baseStrandCount = ();
 
-    my %cov_total;
+    $baseCount{'+'} = { A => 0, C => 0, T => 0, G => 0, N => 0 };
+    $baseCount{'-'} = { A => 0, C => 0, T => 0, G => 0, N => 0 };
+    $cov_total{'+'} = 0;
+    $cov_total{'-'} = 0;
+    $baseStrandCount{'+'} = 0;
+    $baseStrandCount{'-'} = 0;
 
-    if (@$p) {
-        %cov_total = ();
+    for my $pileup (@$p) {
+        next if $pileup->indel or $pileup->is_refskip;    # don't deal with these ;-)
 
-        ( $refbase, $context ) = getRefSeq( $sam, $seqid, $pos, $seqContext );
+        my $a = $pileup->alignment;
 
-        $baseCount->{'+'} = { A => 0, C => 0, T => 0, G => 0, N => 0 };
-        $baseCount->{'-'} = { A => 0, C => 0, T => 0, G => 0, N => 0 };
+        my $qscore = $a->qscore->[ $pileup->qpos ];
+        next if ( ( $qscore - $qsOffset ) < $minBaseQ );
 
-        for my $pileup (@$p) {
+        if ( !defined( $mateOverlap{ $a->qname } ) ) {
+            $mateOverlap{ $a->qname } = $qscore;
+        }
+        else {
+            next if ( $mateOverlap{ $a->qname } >= $qscore );
+        }
 
+        # $readMapStart{$a->start} += 1;
+        my $dupMapID = $a->start . '_' . $a->cigar_str . '_' . $a->flag;
+        $readMapStart{$dupMapID} += 1;
 
-            next if $pileup->indel or $pileup->is_refskip;    # don't deal with these ;-)
+        # filter Duplicates
+        if ( ( $readMapStart{$dupMapID} > $maxDuplicates ) && ( $maxDuplicates > 0 ) ) {
+            $m5Cs{dup}->{ $a->qname } = 1;
+            &$debug( "Found read duplicate: ", $seqid, $pos, $a->start, $a->length, $a->qname );
+            next;
+        }
 
-            my $a = $pileup->alignment;
+      # print $a->qname . " : " . $a->cigar_str . " : ". length($a->qseq) .  " : " . $pileup->pos . " : " . $pos . "\n";
+        my $reversed = $a->reversed;
 
-            # $readMapStart{$a->start} += 1;
-            my $dupMapID = $a->start . '_' . $a->cigar_str . '_' . $a->flag;
-            $readMapStart{$dupMapID} += 1;
+        my $paired    = $a->paired;
+        my $firstMate = 1;            # set initially true also for SE reads
+        if ($paired) {
+            $firstMate = ( ( $a->flag & 0x40 ) != 0 ) ? 1 : 0;
+        }
 
-            # filter Duplicates
-            # if ( ($readMapStart{$a->start} > $maxDuplicates) && ($maxDuplicates > 0) ) {
-            if ( ( $readMapStart{$dupMapID} > $maxDuplicates ) && ( $maxDuplicates > 0 ) ) {
-                $m5Cs{dup}->{ $a->qname } = 1;
-                &$debug( "Found read duplicate: ", $a->start, $a->length, $a->qname );
-                next;
-            }
+        # Get the read associated gene Name
+        $geneName = &$getGeneName($a);
 
-            # print $a->qname . " : " . $a->cigar_str . " : ". length($a->qseq) .  " : " . $pileup->pos . " : " . $pos . "\n";
-            my $reversed = $a->reversed;
+        unless ( $skipPos == 0 ) {
 
-            my $paired    = $a->paired;
-            my $firstMate = 1;            # set initially true also for SE reads
-            if ($paired) {
-                $firstMate = ( ( $a->flag & 0x40 ) != 0 ) ? 1 : 0;
-            }
+            my $posOnread = $pileup->qpos;    # 0-based read position
 
-            # Get the read associated gene Name
-            $geneName = &$getGeneName($a);
+            my $qLen            = length( $a->qseq );
+            my $trimmedBases    = $oriReadLen - $qLen;
+            my $corr            = $fskip3 - $trimmedBases;
+            my $fskip3corrected = ( $corr >= 0 ) ? $corr : 0;
 
-            unless ( $skipPos == 0 ) {
+            # Unfortuantely we can not infer a correction at 5', we assume the reads did not get trimed at 5', FIX me
+            my $fskip5corrected = $fskip5;
 
-                my $posOnread = $pileup->qpos;    # 0-based read position
-
-                my $qLen            = length( $a->qseq );
-                my $trimmedBases    = $oriReadLen - $qLen;
-                my $corr            = $fskip3 - $trimmedBases;
-                my $fskip3corrected = ( $corr >= 0 ) ? $corr : 0;
-
-               # Unfortuantely we can not infer a correction at 5', we assume the reads did not get trimed at 5', FIX me
-                my $fskip5corrected = $fskip5;
-
-                if ($paired) {                    # paired end
-                    if ($firstMate) {             # First mate
-                        if ($reversed) {          # reversed
-                            next if ( $posOnread > ( $qLen - $fskip5corrected ) );
-                            next if ( $posOnread < $fskip3corrected );
-                        }
-                        else {                    # forward
-                            next if ( $posOnread < $fskip5corrected );
-                            next if ( $posOnread > ( $qLen - $fskip3corrected ) );
-                        }
-                    }
-                    else {                        # Second mate
-                        my $corr            = $rskip3 - $trimmedBases;
-                        my $rskip3corrected = ( $corr >= 0 ) ? $corr : 0;
-                        my $rskip5corrected = $rskip5;
-
-                        if ($reversed) {          # reversed
-                            next if ( $posOnread > ( $qLen - $rskip5corrected ) );
-                            next if ( $posOnread < $rskip3corrected );
-                        }
-                        else {                    # forward
-                            next if ( $posOnread < $rskip5corrected );
-                            next if ( $posOnread > ( $qLen - $rskip3corrected ) );
-                        }
-                    }
-                }
-                else {                            # single end
-                    if ($reversed) {
+            if ($paired) {                    # paired end
+                if ($firstMate) {             # First mate
+                    if ($reversed) {          # reversed
                         next if ( $posOnread > ( $qLen - $fskip5corrected ) );
                         next if ( $posOnread < $fskip3corrected );
                     }
-                    else {
+                    else {                    # forward
                         next if ( $posOnread < $fskip5corrected );
                         next if ( $posOnread > ( $qLen - $fskip3corrected ) );
                     }
                 }
-            }    # end skip
+                else {                        # Second mate
+                    my $corr            = $rskip3 - $trimmedBases;
+                    my $rskip3corrected = ( $corr >= 0 ) ? $corr : 0;
+                    my $rskip5corrected = $rskip5;
 
-            my $qbase = uc( substr( $a->qseq, $pileup->qpos, 1 ) );
-            # print "RB: " . $refbase . " QB: " . $qbase . "\n";
-            next if ( ( $qbase eq 'N' ) || ( $refbase eq 'N' ) );
+                    if ($reversed) {          # reversed
+                        next if ( $posOnread > ( $qLen - $rskip5corrected ) );
+                        next if ( $posOnread < $rskip3corrected );
+                    }
+                    else {                    # forward
+                        next if ( $posOnread < $rskip5corrected );
+                        next if ( $posOnread > ( $qLen - $rskip3corrected ) );
+                    }
+                }
+            }
+            else {                            # single end
+                if ($reversed) {
+                    next if ( $posOnread > ( $qLen - $fskip5corrected ) );
+                    next if ( $posOnread < $fskip3corrected );
+                }
+                else {
+                    next if ( $posOnread < $fskip5corrected );
+                    next if ( $posOnread > ( $qLen - $fskip3corrected ) );
+                }
+            }
+        }    # end skip
 
-            my $strand = "+";
+        my $qbase = uc( substr( $a->qseq, $pileup->qpos, 1 ) );
 
-            ### genomeDBref && strand
-            if ($genomeDBref) {
-              if($readDir eq "fr") {
+        # print "RB: " . $refbase . " QB: " . $qbase . "\n";
+        next if ( ( $qbase eq 'N' ) || ( $refbase eq 'N' ) );
+
+        my $strand = "+";
+
+        ### genomeDBref && strand
+        if ($genomeDBref) {
+            if ( $readDir eq "fr" ) {
                 if ( ($reversed) && ($firstMate) ) {    # reverse the mapped base
                     $qbase =~ tr/[ACGT]/[TGCA]/;
                     $strand = "-";
@@ -827,12 +908,12 @@ sub meth_caller {
                 elsif ( ( !$reversed ) && ($firstMate) ) {       # reverse the mapped base
                     $strand = "+";
                 }
-              }
-              else {
+            }
+            else {
                 if ( ($reversed) && ($firstMate) ) {
-                   $strand = "+";
+                    $strand = "+";
                 }
-                elsif ( ($reversed) && ( !$firstMate ) ) {    # reverse the mapped base
+                elsif ( ($reversed) && ( !$firstMate ) ) {       # reverse the mapped base
                     $qbase =~ tr/[ACGT]/[TGCA]/;
                     $strand = "-";
                 }
@@ -843,51 +924,86 @@ sub meth_caller {
                 elsif ( ( !$reversed ) && ($firstMate) ) {       # reverse the mapped base
                     $strand = "-";
                 }
-              }
             }
-            else {
-                if ( ($reversed) && ($firstMate) && ( $readDir ne "rf") ) {
-                    warn("First mate read mapped in wrong direction, skipping read...\n");
-                    next;
-                }
-                elsif ( ( !$reversed ) && ( !$firstMate ) && ( $readDir ne "rf")  ) {
-                    warn("Second mate read mapped in wrong direction, skipping read...\n");
-                    next;
-                }
-
-                $strand = "+";
-
+        }
+        else {
+            if ( ($reversed) && ($firstMate) && ( $readDir ne "rf" ) ) {
+                warn("First mate read mapped in wrong direction, skipping read...\n");
+                next;
+            }
+            elsif ( ( !$reversed ) && ( !$firstMate ) && ( $readDir ne "rf" ) ) {
+                warn("Second mate read mapped in wrong direction, skipping read...\n");
+                next;
             }
 
-            my $qscore = $a->qscore->[ $pileup->qpos ];
-            &$debug( "QS: ", $qscore );
+            $strand = "+";
 
-            my $read_Ccount = ($strand eq "+") ? uc($a->qseq) =~ tr/C// : uc($a->qseq) =~ tr/G//;
-            &$debug( "Cs: ", $read_Ccount, " : ", $strand, " : " , uc($a->qseq) );
+        }
 
-            $cov_total{$strand}++;
+        my $read_Ccount = ( $strand eq "+" ) ? uc( $a->qseq ) =~ tr/C// : uc( $a->qseq ) =~ tr/G//;
+        &$debug( $seqid . ":" . $pos . ":" . $strand,
+                 "QB:" . $qbase,
+                 "Cs: ", $read_Ccount, " : ", ( $qscore - $qsOffset ) );
 
-            next unless ( defined($qscore) && ( ( $qscore - $qsOffset ) >= $minBaseQ ) && ($read_Ccount < $C_cutoff) );
+        $cov_total{$strand}++;
 
-            $baseStrandCount{$strand}++;
-            $baseCount->{$strand}->{$qbase}++;
+        next unless ( $read_Ccount < $C_cutoff );
+        &$debug( "Pass:",
+                 $seqid . ":" . $pos . ":" . $strand,
+                 "QB:" . $qbase,
+                 "Cs: ", $read_Ccount, " : ", ( $qscore - $qsOffset ) );
 
+        $baseStrandCount{$strand}++;
+        $baseCount{$strand}->{$qbase}++;
 
-        }    # end for @$p
+    }    # end for @$p
+    my %pileupRes = (
+                      'cov_total'       => \%cov_total,
+                      'baseStrandCount' => \%baseStrandCount,
+                      'baseCount'       => \%baseCount,
+                      'geneName'        => $geneName,
+                      );
+
+    return (%pileupRes);
+}
+
+sub meth_caller {
+    my ( $seqid, $pos, $p ) = @_;
+    my $refbase;
+    my $context;
+
+    return unless $pos >= $start && $pos <= $end;
+
+    # my %cov_total;
+
+    if (@$p) {
+
+        # %cov_total = ();
+
+        ( $refbase, $context ) = getRefSeq( $sam, $seqid, $pos, $seqContext );
+
+        my %pileupRes = analyzePileup( $seqid, $pos, $p, $refbase );
+
+        # print Dumper(\%pileupRes);
 
         my $refbaseRev = $refbase;
-        $refbaseRev    =~ tr/[ACGT]/[TGCA]/;
+        $refbaseRev =~ tr/[ACGT]/[TGCA]/;
         my $contextRev = reverse($context);
         $contextRev =~ tr/[ACGTacgt]/[TGCAtgca]/;
         my %strandRefbase = ( '+' => $refbase, '-' => $refbaseRev );
         my %strandContext = ( '+' => $context, '-' => $contextRev );
 
-        foreach my $s ( keys(%baseStrandCount) ) {
+        foreach my $s ( keys( %{ $pileupRes{baseStrandCount} } ) ) {
 
             # debug("strand ", $s);
-            if ( $baseStrandCount{$s} > 0 ) {
-                &$callMethStatus( $baseCount->{$s}, $s, $strandRefbase{$s}, $strandContext{$s}, $seqid, $pos,
-                                  $baseStrandCount{$s}, $geneName, $cov_total{$s} );
+            if ( $pileupRes{baseStrandCount}->{$s} > 0 ) {
+                &$callMethStatus(
+                                  $pileupRes{baseCount}->{$s},       $s,
+                                  $strandRefbase{$s},                $strandContext{$s},
+                                  $seqid,                            $pos,
+                                  $pileupRes{baseStrandCount}->{$s}, $pileupRes{geneName},
+                                  $pileupRes{cov_total}->{$s}
+                                  );
             }
         }
     }
@@ -922,7 +1038,7 @@ sub callMethStatus {
     my $coverage = 0;
     my $reportMe = 0;
 
-    if ( ( $total >= $minCov ) && ( $baseCount->{C} >= $minC ) && ( ($total / $cov_total) > $snr ) ) {
+    if ( ( $total >= $minCov ) && ( $baseCount->{C} >= $minC ) && ( ( $total / $cov_total ) > $snr ) ) {
         my $maxCalledBase = reduce { $baseCount->{$a} > $baseCount->{$b} ? $a : $b } keys %{$baseCount};
         my @equalCalledBases = grep { $baseCount->{$_} eq $baseCount->{$maxCalledBase} } keys %{$baseCount};
         $maxCalledBase = join( '', ( sort(@equalCalledBases) ) );
@@ -950,8 +1066,18 @@ sub callMethStatus {
                     $reportMe = 1;
                     $m5Cs_->{$seqid}->{pos}{$pos}{sate} = 'M';
 
+                    my $cr = $conversionRate;
+                    if ($useGeneCR) {
+                        my $geneIdx = getGeneIdxFromPos( $seqid, $pos, $strand );
+                        $cr =
+                            ( $geneIdx != -1 && defined( $gtf{$seqid}->{$strand}->{$geneIdx}->{m_rate_g} ) )
+                          ? ( 1 - $gtf{$seqid}->{$strand}->{$geneIdx}->{m_rate_g} )
+                          : ( 1 - $gtf{intergenic}->{0}->{m_rate_g} );
+                    }
+
                     # get statistics
-                    my ( $lci, $uci, $rBinomP, $binomP, $score ) = getSignificance( $methRate, $coverage, $methNr );
+                    my ( $lci, $uci, $rBinomP, $binomP, $score ) =
+                      getSignificance( $methRate, $coverage, $methNr, $cr );
 
                     # Wilson score interval
                     @{ $m5Cs_->{$seqid}->{pos}{$pos}{CI95} } = ( $lci, $uci );
@@ -979,8 +1105,17 @@ sub callMethStatus {
                 $reportMe = 1;
                 $m5Cs_->{$seqid}->{pos}{$pos}{sate} = 'MV';
 
+                my $cr = $conversionRate;
+                if ($useGeneCR) {
+                    my $geneIdx = getGeneIdxFromPos( $seqid, $pos, $strand );
+                    $cr =
+                        ( $geneIdx != -1 && defined( $gtf{$seqid}->{$strand}->{$geneIdx}->{m_rate_g} ) )
+                      ? ( 1 - $gtf{$seqid}->{$strand}->{$geneIdx}->{m_rate_g} )
+                      : ( 1 - $gtf{intergenic}->{0}->{m_rate_g} );
+                }
+
                 # get statistics
-                my ( $lci, $uci, $rBinomP, $binomP, $score ) = getSignificance( $methRate, $coverage, $methNr );
+                my ( $lci, $uci, $rBinomP, $binomP, $score ) = getSignificance( $methRate, $coverage, $methNr, $cr );
 
                 # Wilson score interval
                 @{ $m5Cs_->{$seqid}->{pos}{$pos}{CI95} } = ( $lci, $uci );
@@ -1069,7 +1204,7 @@ sub callMethStatusAZA {
     my $coverage = 0;
     my $reportMe = 0;
 
-    if ( ( $total >= $minCov ) && ( $baseCount->{G} >= $minC ) && ( ($total / $cov_total) > $snr ) ) {
+    if ( ( $total >= $minCov ) && ( $baseCount->{G} >= $minC ) && ( ( $total / $cov_total ) > $snr ) ) {
         my $maxCalledBase = reduce { $baseCount->{$a} > $baseCount->{$b} ? $a : $b } keys %{$baseCount};
         my @equalCalledBases = grep { $baseCount->{$_} eq $baseCount->{$maxCalledBase} } keys %{$baseCount};
         $maxCalledBase = join( '', ( sort(@equalCalledBases) ) );
@@ -1085,7 +1220,7 @@ sub callMethStatusAZA {
             $convRate = $methRate;
             $m5Cs_->{$seqid}->{ConvRate} += $convRate;
 
-            $m5Cs_->{$seqid}->{methCTanalyzed} += $C;    # TODO: change methCTanalyzed to something meaningful
+            $m5Cs_->{$seqid}->{methCTanalyzed} += $C;        # TODO: change methCTanalyzed to something meaningful
             $m5Cs_->{$seqid}->{methCanalyzed}  += $methNr;
 
             if ( ( $mutRate >= $minMutRate ) && ( $methRate < $minMethRate ) && ( $coverage >= $minCov ) ) {
@@ -1097,8 +1232,18 @@ sub callMethStatusAZA {
                     $reportMe = 1;
                     $m5Cs_->{$seqid}->{pos}{$pos}{sate} = 'M';
 
+                    my $cr = $conversionRate;
+                    if ($useGeneCR) {
+                        my $geneIdx = getGeneIdxFromPos( $seqid, $pos, $strand );
+                        $cr =
+                            ( $geneIdx != -1 && defined( $gtf{$seqid}->{$strand}->{$geneIdx}->{m_rate_g} ) )
+                          ? ( 1 - $gtf{$seqid}->{$strand}->{$geneIdx}->{m_rate_g} )
+                          : ( 1 - $gtf{intergenic}->{0}->{m_rate_g} );
+                    }
+
                     # get statistics
-                    my ( $lci, $uci, $rBinomP, $binomP, $score ) = getSignificance( $methRate, $coverage, $methNr );
+                    my ( $lci, $uci, $rBinomP, $binomP, $score ) =
+                      getSignificance( $methRate, $coverage, $methNr, $cr );
 
                     # Wilson score interval
                     @{ $m5Cs_->{$seqid}->{pos}{$pos}{CI95} } = ( $lci, $uci );
@@ -1127,8 +1272,17 @@ sub callMethStatusAZA {
                 $reportMe = 1;
                 $m5Cs_->{$seqid}->{pos}{$pos}{sate} = 'MV';
 
+                my $cr = $conversionRate;
+                if ($useGeneCR) {
+                    my $geneIdx = getGeneIdxFromPos( $seqid, $pos, $strand );
+                    $cr =
+                        ( $geneIdx != -1 && defined( $gtf{$seqid}->{$strand}->{$geneIdx}->{m_rate_g} ) )
+                      ? ( 1 - $gtf{$seqid}->{$strand}->{$geneIdx}->{m_rate_g} )
+                      : ( 1 - $gtf{intergenic}->{0}->{m_rate_g} );
+                }
+
                 # get statistics
-                my ( $lci, $uci, $rBinomP, $binomP, $score ) = getSignificance( $methRate, $coverage, $methNr );
+                my ( $lci, $uci, $rBinomP, $binomP, $score ) = getSignificance( $methRate, $coverage, $methNr, $cr );
 
                 # Wilson score interval
                 @{ $m5Cs_->{$seqid}->{pos}{$pos}{CI95} } = ( $lci, $uci );
@@ -1171,11 +1325,117 @@ sub callMethStatusAZA {
 
 }
 
+sub call_geneCR {
+    my ( $seqid, $pos, $p ) = @_;
+    my $refbase;
+    my $context;
+
+    return unless $pos >= $start && $pos <= $end;
+
+    if (@$p) {
+
+        ( $refbase, $context ) = getRefSeq( $sam, $seqid, $pos, 0 );
+
+        if ( $refbase eq "C" || $refbase eq "G" ) {
+
+            my %pileupRes = analyzePileup( $seqid, $pos, $p, $refbase );
+
+            my $refbaseRev = $refbase;
+            $refbaseRev =~ tr/[ACGT]/[TGCA]/;
+
+            my %strandRefbase = ( '+' => $refbase, '-' => $refbaseRev );
+
+            foreach my $s ( keys( %{ $pileupRes{baseStrandCount} } ) ) {
+
+                # debug("strand ", $s);
+                if ( $pileupRes{baseStrandCount}->{$s} > 0 ) {
+                    my $geneIdx = getGeneIdxFromPos( $seqid, $pos, $s );
+
+                    my $mrate =
+                      ( $pileupRes{baseCount}->{$s}->{C} + $pileupRes{baseCount}->{$s}->{T} > 0 )
+                      ? ( $pileupRes{baseCount}->{$s}->{C} /
+                          ( $pileupRes{baseCount}->{$s}->{C} + $pileupRes{baseCount}->{$s}->{T} ) )
+                      : 0;
+                    if ( $geneIdx != -1 ) {
+                        $geneCR{seqid}->{$seqid}->{$s}->{$geneIdx}->{C_count} += $pileupRes{baseCount}->{$s}->{C};
+                        $geneCR{seqid}->{$seqid}->{$s}->{$geneIdx}->{CT_count} +=
+                          $pileupRes{baseCount}->{$s}->{C} + $pileupRes{baseCount}->{$s}->{T};
+                        push( @{ $geneCR{seqid}->{$seqid}->{$s}->{$geneIdx}->{m_rates} }, $mrate );
+                    }
+                    else {
+                        $geneCR{intergenic}->{$s}->{C_count} += $pileupRes{baseCount}->{$s}->{C};
+                        $geneCR{intergenic}->{$s}->{CT_count} +=
+                          $pileupRes{baseCount}->{$s}->{C} + $pileupRes{baseCount}->{$s}->{T};
+                        push( @{ $geneCR{intergenic}->{$s}->{m_rates} }, $mrate );
+                    }
+                }
+            }
+        }
+    }
+}
+
+sub getGeneIdxFromPos {
+    my $seqid  = shift;
+    my $pos    = shift;
+    my $strand = shift;
+
+    if ( !defined( $sortedGeneStarts{$seqid} ) ) { return -1; }
+
+    my $geneStarts = $sortedGeneStarts{$seqid}->{$strand};
+    my $next_idx = lower_bound { $_ <=> $pos } @{$geneStarts};
+
+    if ( defined( $geneStarts->[$next_idx] ) && $geneStarts->[$next_idx] == $pos ) {
+        return $geneStarts->[$next_idx];
+    }
+    elsif ( !defined( $geneStarts->[$next_idx] ) && $next_idx == 1 && $next_idx == @$geneStarts ) {
+        return $geneStarts->[0];
+    }
+    elsif (    defined( $geneStarts->[ $next_idx - 1 ] )
+            && $geneStarts->[ $next_idx - 1 ] < $pos
+            && $gtf{$seqid}->{$strand}->{ $geneStarts->[ $next_idx - 1 ] }->{end} > $pos )
+    {
+        return $geneStarts->[ $next_idx - 1 ];
+    }
+    return -1;
+}
+
+sub geneCRcollector {
+    my ( $pid, $exit_code, $ident, $exit_signal, $core_dump, $dataRef ) = @_;
+
+    if ( defined( $dataRef->{seqid} ) ) {
+        my $seqid = ( keys %{ $dataRef->{seqid} } )[0];
+        my $s     = ( keys %{ $dataRef->{seqid}->{$seqid} } )[0];
+        my $gidx  = ( keys %{ $dataRef->{seqid}->{$seqid}->{$s} } )[0];
+
+        # print Dumper($dataRef);
+        $gtf{$seqid}->{$s}->{$gidx}->{$_} = $dataRef->{seqid}->{$seqid}->{$s}->{$gidx}->{$_}
+          for qw(C_count CT_count m_rates);
+        $gtf{$seqid}->{$s}->{$gidx}->{m_rate} =
+          ( scalar @{ $gtf{$seqid}->{$s}->{$gidx}->{m_rates} } != 0 )
+          ? sum( @{ $gtf{$seqid}->{$s}->{$gidx}->{m_rates} } ) / ( scalar @{ $gtf{$seqid}->{$s}->{$gidx}->{m_rates} } )
+          : 0;
+        $gtf{$seqid}->{$s}->{$gidx}->{m_rate_g} =
+          ( $gtf{$seqid}->{$s}->{$gidx}->{CT_count} != 0 )
+          ? $gtf{$seqid}->{$s}->{$gidx}->{C_count} / $gtf{$seqid}->{$s}->{$gidx}->{CT_count}
+          : 0;
+        delete( $gtf{$seqid}->{$s}->{$gidx}->{m_rates} );
+
+    }
+    if ( defined( $dataRef->{intergenic} ) ) {
+        foreach my $s ( keys %{ $dataRef->{intergenic} } ) {
+            $gtf{intergenic}->{$s}->{0}->{C_count}  += $dataRef->{intergenic}->{$s}->{C_count};
+            $gtf{intergenic}->{$s}->{0}->{CT_count} += $dataRef->{intergenic}->{$s}->{CT_count};
+            push( @{ $gtf{intergenic}->{$s}->{0}->{m_rates} }, $dataRef->{intergenic}->{$s}->{m_rates} );
+        }
+    }
+}
+
 sub getSignificance {
-    my ( $methRate, $coverage, $methNr ) = @_;
-    
+    my ( $methRate, $coverage, $methNr, $cr ) = @_;
+    $cr //= $conversionRate;
+
     # shortcut, do not caclulate stats when estimating the C->T conversion rate
-    return (0, 0, 0, 0, 0) if ( $calculateConvR );
+    return ( 0, 0, 0, 0, 0 ) if ($calculateConvR);
 
     # Wilson score interval
     my ( $lci, $uci ) = calculateCi95( $methRate, $coverage );
@@ -1183,9 +1443,9 @@ sub getSignificance {
     # caclulate p-values using a Fisher's exact test when no C->T conversion rate is known
     # for this we compare the methylation rate with the max baseline sequencing error provided
     # by the minimum Q-value (default Q30)
-    if ( $conversionRate == -1 ) {
+    if ( $cr == -1 ) {
         my $fisherP = 1;
-        
+
         # BASELINE_ERR is the probability that the basecalls are not correct
         # = 10^(-Q/10) but we assume to only expect 25% of the misscalls to
         # be a C or G in aza mode
@@ -1203,23 +1463,23 @@ sub getSignificance {
 
         $t[1][0] = $expMeth;
         $t[1][1] = $expConv;
-        
-        $fisherP = fisherExactTest([@t]);
-        
-        return ($lci, $uci, undef, $fisherP, ($methNr * $lci * 10));
+
+        $fisherP = fisherExactTest( [@t] );
+
+        return ( $lci, $uci, undef, $fisherP, ( $methNr * $lci * 10 ) );
 
     }
 
     # Barturen et al. 2013
     # maximum false C calls at the given error interval & conversion rate
     my $mFCs = maxFalseCs( $methRate, $coverage, $methNr, $errorInterval );
-    my $rBinomP = 1 - pbinom( $mFCs, $methNr, ( 1 - $conversionRate ) );
+    my $rBinomP = 1 - pbinom( $mFCs, $methNr, ( 1 - $cr ) );
     $rBinomP = ( $rBinomP < 0 ) ? 0 : $rBinomP;    # return
 
     if ( $fisherTest == 1 ) {
         my $fisherP = 1;
-        
-        my $expMeth = int( $coverage * (1 - $conversionRate) );
+
+        my $expMeth = int( $coverage * ( 1 - $cr ) );
         my $expConv = $coverage - $expMeth;
 
         # Setup contingency table for Fisher's exact test
@@ -1234,7 +1494,7 @@ sub getSignificance {
         $t[1][0] = $expMeth;
         $t[1][1] = $expConv;
 
-        $fisherP = fisherExactTest([@t]);
+        $fisherP = fisherExactTest( [@t] );
 
         my $fisherP_ = ( $fisherP == 0 ) ? 1e-20 : $fisherP;
         my $score = $methNr * $lci * -log10($fisherP_);
@@ -1245,7 +1505,7 @@ sub getSignificance {
     else {
 
         # Lister et al. 2009
-        my $binomP = 1 - pbinom( $methNr, $coverage, ( 1 - $conversionRate ) );
+        my $binomP = 1 - pbinom( $methNr, $coverage, ( 1 - $cr ) );
 
         my $binomP_ = ( $binomP == 0 ) ? 1e-20 : $binomP;
         my $score = $methNr * $lci * -log10($binomP_);
@@ -1273,37 +1533,38 @@ sub calculateCi95 {
 
 sub fisherExactTest {
     my $table = $_[0];
-    
+
     my $pValue = 1;
 
     #          word2   ~word2
     #  word1    n11      n12 | n1p
     # ~word1    n21      n22 | n2p
     #           --------------
-    #           np1      np2   npp    
-    
+    #           np1      np2   npp
+
     my $npp = $table->[0]->[0] + $table->[0]->[1] + $table->[1]->[0] + $table->[1]->[1];
     my $n11 = $table->[0]->[0];
     my $n1p = $table->[0]->[0] + $table->[0]->[1];
     my $np1 = $table->[0]->[0] + $table->[1]->[0];
 
-    $pValue = calculateStatistic( n11=>$n11,
-                                  n1p=>$n1p,
-                                  np1=>$np1,
-                                  npp=>$npp
-                                 );
+    $pValue = calculateStatistic(
+                                  n11 => $n11,
+                                  n1p => $n1p,
+                                  np1 => $np1,
+                                  npp => $npp
+                                  );
 
     # TODO: Check this! Won't work when packed into a standalone binary via pp
     #if ( (my $errorCode = getErrorCode()) ) {
     #    say STDERR $errorCode . " - " . getErrorMessage();
     #    $pValue = 1;
     #}
-    
+
     return ($pValue);
 
 }
 
-sub calculatePV {          # NOT used
+sub calculatePV {    # NOT used
     my ( $p, $n, $nullHyp ) = @_;    # ($methRate, $n)
 
     my $u = ( $p - $nullHyp ) / sqrt( $nullHyp * ( 1 - $nullHyp ) / $n );
@@ -1312,7 +1573,7 @@ sub calculatePV {          # NOT used
     return ($pval);
 }
 
-sub binomCoeff {          # NOT used
+sub binomCoeff {                     # NOT used
     my ( $n, $k ) = @_;
 
     my ( $u, $l ) = ( 0, 0 );
@@ -1374,17 +1635,17 @@ sub getRefSeq {
 
     my ( $seqContextL, $seqContextR ) = ( abs($seqContext), abs($seqContext) );
     my $sLength = $sam->length($seqid);
-    
-    if ( ( $pos > $sLength ) || ( $pos < 1 ) ) {
-        warn("Base Position " . $pos . " out of reference sequence length: " . $sLength);
-        return ( "N", ("N")x(2*$seqContextR) );
-    }
-    
-    my $start   = $pos - $seqContextL;
-    my $end     = $pos + $seqContextR;
 
-    ( $start, $seqContextL ) = ( $start > 0 )        ? ( $start, $seqContextL ) : ( 1, 0 );
-    ( $end,   $seqContextR ) = ( $end > $sLength )   ? ( $sLength, $end - $sLength ) : ( $end, $seqContextR );
+    if ( ( $pos > $sLength ) || ( $pos < 1 ) ) {
+        warn( "Base Position " . $pos . " out of reference sequence length: " . $sLength );
+        return ( "N", ("N") x ( 2 * $seqContextR ) );
+    }
+
+    my $start = $pos - $seqContextL;
+    my $end   = $pos + $seqContextR;
+
+    ( $start, $seqContextL ) = ( $start > 0 ) ? ( $start, $seqContextL ) : ( 1, 0 );
+    ( $end, $seqContextR ) = ( $end > $sLength ) ? ( $sLength, $end - $sLength ) : ( $end, $seqContextR );
 
     $context = $sam->segment( $seqid, $start, $end )->dna;
     $refbase = uc( substr( $context, $seqContextL, 1 ) );
@@ -1414,7 +1675,7 @@ sub resultCollector {
             else {
                 $methCT += ( defined( $m5Cdata->{methCT} ) ) ? $m5Cdata->{methCT} : 0;
             }
-            $methC  += ( defined( $m5Cdata->{methC} ) )  ? $m5Cdata->{methC}  : 0;
+            $methC += ( defined( $m5Cdata->{methC} ) ) ? $m5Cdata->{methC} : 0;
 
             $methCTanalyzed += ( defined( $m5Cdata->{methCTanalyzed} ) ) ? $m5Cdata->{methCTanalyzed} : 0;
             $methCanalyzed  += ( defined( $m5Cdata->{methCanalyzed} ) )  ? $m5Cdata->{methCanalyzed}  : 0;
@@ -1460,7 +1721,8 @@ sub resultCollector {
                                               $rpvalNice,             $scoreNice,             $context,
                                               $geneName,              $candidateName
                                              )
-                                             ) . "\n";
+                      )
+                      . "\n";
 
                     &resultWirter($resultLine) unless ($calculateConvR);
 
@@ -1495,7 +1757,8 @@ sub resultCollector {
 
     $seqpctDone = $end * 100 / $tlength;
     printf( "processing %i sequences: \[%s - %02.2f%%\] [overall - %02.2f%%] done ...\r",
-            $nrOftargets, $wSid, $seqpctDone, $totpctDone ) unless ( $bedFileIN );
+            $nrOftargets, $wSid, $seqpctDone, $totpctDone )
+      unless ($bedFileIN);
 
 }
 
@@ -1554,7 +1817,8 @@ sub bedWriter {
                             $chrom, $chromStart, $chromEnd, $candidateName, $score, $strand, ( $mrate * 100 ),
                             $pVal, -1, 0
                            )
-                           ) . "\n";
+          )
+          . "\n";
     }
 
     lockF($bedFH);
@@ -1567,19 +1831,19 @@ sub bedWriter {
 sub FDRc {
     my $data = shift;
     my $FDR  = shift;
-    
+
     my @fdrResults;
 
     # sort p-values ascending
     my @rankedData = sort { $a->[0] <=> $b->[0] } @$data;
-    my $tests      = scalar @rankedData;
+    my $tests = scalar @rankedData;
 
     # Top down
     my $k = $tests - 1;
     my $i = $k;
-    while ($k >= 0) {
+    while ( $k >= 0 ) {
         my $rank = $rankedData[$k];
-        my $pvT = ($k + 1) / $tests * $FDR;
+        my $pvT  = ( $k + 1 ) / $tests * $FDR;
         if ( $rank->[0] <= $pvT ) {
             $i = $k;
             last;
@@ -1587,25 +1851,25 @@ sub FDRc {
         $k--;
     }
 
-    if ( $k == - 1 ) {    # No significant m5C found
-        return(undef);
+    if ( $k == -1 ) {    # No significant m5C found
+        return (undef);
     }
 
-    my $l           = 0;
-    my $pv_adj      = 0;
-    
-    my @fdrCorrPV = map { $rankedData[$_][0] * $tests / ( $_ + 1 ) } 0..$i;
+    my $l      = 0;
+    my $pv_adj = 0;
+
+    my @fdrCorrPV = map { $rankedData[$_][0] * $tests / ( $_ + 1 ) } 0 .. $i;
 
     while ( $l <= $i ) {
-        $pv_adj = min(@fdrCorrPV[$l..$i]);
+        $pv_adj = min( @fdrCorrPV[ $l .. $i ] );
 
-        # return FDR controlled data: 
+        # return FDR controlled data:
         # [l][0]: raw p-value
         # [l][1]: FDR adjusted p-value
         # [l][2]: optional data if exists (untouched)
         $fdrResults[$l][0] = $rankedData[$l][0];
         $fdrResults[$l][1] = $pv_adj;
-        $fdrResults[$l][2] = $rankedData[$l][1] if ( defined($rankedData[$l][1]) );
+        $fdrResults[$l][2] = $rankedData[$l][1] if ( defined( $rankedData[$l][1] ) );
 
         $l++;
     }
@@ -1668,13 +1932,13 @@ sub index_bam {
 
 sub getRefLengths {
     my $faidxFile = $_[0];
-    
-    my $faiFH = IO::File->new( $faidxFile, O_RDONLY ) 
-      || die("ERROR: could not read the fasta index file " . $faidxFile . " : check permissions");
+
+    my $faiFH = IO::File->new( $faidxFile, O_RDONLY )
+      || die( "ERROR: could not read the fasta index file " . $faidxFile . " : check permissions" );
 
     my $refLen;
     while ( my $l = $faiFH->getline() ) {
-        my ($seqID, $len) = split("\t", $l, 3);
+        my ( $seqID, $len ) = split( "\t", $l, 3 );
         $refLen->{$seqID} = $len;
     }
     return ($refLen);
@@ -1685,7 +1949,7 @@ sub readBED {
     my $bedData   = $_[1];
     my $recCount  = $_[2];
     my $chrPrefix = $_[3] // "";
-    
+
     my $bedFH = IO::File->new( $bedFile, O_RDONLY | O_EXCL ) || die( $bedFile . ": " . $! );
 
     while ( defined( my $bedLine = $bedFH->getline() ) ) {
@@ -1695,24 +1959,65 @@ sub readBED {
             next;
         }
 
-        my ( $chrom, $chromStart, $chromEnd, $name) = split( '\t', $bedLine );
+        my ( $chrom, $chromStart, $chromEnd, $name ) = split( '\t', $bedLine );
         if ($chrPrefix) {
             $chrom = $chrPrefix . $chrom;
         }
-        if ( ($chromStart !~ /\d/) || ($chromEnd !~ /\d/) || ($chromEnd < $chromStart) ) {
+        if ( ( $chromStart !~ /\d/ ) || ( $chromEnd !~ /\d/ ) || ( $chromEnd < $chromStart ) ) {
             say STDERR "This does not look like a BED file: " . $bedFile;
             exit(1);
         }
 
-        push( @{ $bedData->{$chrom}->{range} }, [ ( $chromStart ), $chromEnd ] );
-        push( @{ $bedData->{$chrom}->{line} },   $bedLine );
-        
+        push( @{ $bedData->{$chrom}->{range} }, [ ($chromStart), $chromEnd ] );
+        push( @{ $bedData->{$chrom}->{line} }, $bedLine );
+
         $recCount++;
     }
     $bedFH->close();
     undef($bedFH);
-    
+
     $_[2] = $recCount;
+}
+
+sub readGTF {
+    my $gtfFile = shift;
+    my $gtf     = shift;
+
+    my $gtfFH = IO::Zlib->new( $gtfFile, "rb" ) || die( $gtfFile . ": " . $! );
+
+    while ( defined( my $gtfLine = $gtfFH->getline() ) ) {
+        next if ( $gtfLine =~ /^\#/ );
+
+        chomp($gtfLine);
+        my ( $seqname, $source, $feature, $start, $end, $score, $strand, $frame, $attribute ) = split( '\t', $gtfLine );
+
+        next if ( $feature ne "gene" );
+
+        my @keyval = split( /;\s?/, $attribute );
+        my %attribs;
+        %attribs = map {
+            my ( $t, $v ) = split( /\ /, $_, 2 );
+            ( $v && ( $t =~ /transcript_id|gene_id|gene_name/ ) )
+              ? ( $t => $v )
+              : ()
+        } @keyval;
+
+        $gtf->{$seqname}->{$strand}->{$start} = {
+                                                  seqname   => $seqname,
+                                                  source    => $source,
+                                                  feature   => $feature,
+                                                  start     => int($start),
+                                                  end       => int($end),
+                                                  range     => [ int($start), int($end) ],
+                                                  score     => $score,
+                                                  strand    => $strand,
+                                                  frame     => $frame,
+                                                  attribute => $attribute,
+                                                  gene_id   => $attribs{gene_id},
+                                                  };
+    }
+    $gtf->{intergenic}->{'+'}->{0} = { seqname => 'intergenic', C_count => 0, CT_count => 0, m_rates => [] };
+    $gtf->{intergenic}->{'-'}->{0} = { seqname => 'intergenic', C_count => 0, CT_count => 0, m_rates => [] };
 }
 
 sub checkWirteToDir {
@@ -1747,9 +2052,9 @@ sub checkDir {
 
 sub nicePath {
     my $rawPath = shift;
-    
+
     $rawPath =~ s/\/+/\//g;
-    return($rawPath);
+    return ($rawPath);
 }
 
 sub usage {
@@ -1869,8 +2174,17 @@ Options:
                              the read will be ignored.
                              (default: 3)
 
-    -conversionRate|-cr    : C->T Conversion rate (0 < cr < 1)
+    -conversionRate|-cr    : Global C->T conversion rate (0 < cr <= 1). Will be used for
+                             calculating p-values.
                              (default: 1)
+
+    -geneConvRate|-gcr     : Calculate and use gene specific C->T conversion rates. Will
+                             be used for calculating p-values. This CR is specific to each
+                             gene. Needs a GTF file (see below).
+                             (default: not set)
+
+    -gtf                   : GTF file for calculating the gene specific conversion rates.
+                             (default: not set)
 
     -errorInterval|-ei     : Error interval for methylation rate p-value calculation
                              (default: 0)
@@ -1878,12 +2192,12 @@ Options:
     -fdr                   : Control the false discovery rate of methylated cytosines
                              at the specified FDR (0 < fdr < 1).
                              (default: not set)
-                            
+
     -fdrRate               : Use the probability that the real methylation level or rate
                              instead of the methylation state p-value to control the
                              false discovery rate at -fdr FDR (0 < fdr < 1).
                              (default: not set)
-                            
+
     -calcConvRate|-ccr     : Caluclate the C->T conversion rate from an unmehtylated
                              control sequence.
                              (default: not set)
@@ -1900,7 +2214,7 @@ Options:
 
     -reportUP|-rUP         : report unmethylated mutated bases?
                             (default: not set)
-                            
+
     -bed63                 : Generate a BED6 + 3 file - only relevant for genome mapped
                              data!
                             (default: not set)
@@ -1908,7 +2222,7 @@ Options:
     -narrowPeak|-np        : Generate a narrowPeak BED file - only relevant for genome
                              mapped data!
                             (default: not set)
-                            
+
     -seqContext|-sc        : If set to a number, this number of bases 5' and 3' of
                              the methylated C will be displayed in the result file.
                              (default: not set)
@@ -1916,27 +2230,27 @@ Options:
     -havZG|-zg             : If set, the methylation caller will look for the "ZG"
                              custom SAM tag and use it a gene name associated with
                              the methylated positon in the result file.
-                           
+
                              meRanT adds this tag to the SAM entries.
-                           
+
                              meRanG does not, however you can use the BED6 + 3
                              file and run the "meRanAnnotate" tool from meRanTK to
                              associate methylated C's  with gene (transcript) names.
-                           
+
                              (default: not set)
 
     -azaMode|-aza          : If set, the methylation caller will run in the Aza-IP mode
                              and enables methylation calling from Aza-IP data by looking
                              for C->G conversions, which are characteristic for Aza-IP data.
-                           
+
                              (default: not set)
 
     --version              : Print the program version and exit.
     -h|help                : Print the program help information.
     -man                   : Print a detailed documentation.
-    
+
     -debug|-d              : Print some debugging information.
-    
+
 EOF
 }
 
@@ -1951,7 +2265,7 @@ meRanCall - RNA cytosine methylation caller
 =head2 methylation calling from RNA-BSseq short reads mapped to a transcriptome
 
 =over 2
- 
+
 ### Single End reads
 
  meRanCall \
@@ -1988,7 +2302,7 @@ meRanCall - RNA cytosine methylation caller
 
  The result meRanCallResult.txt is a tab separated file and contains the following
  data-fields for each potentially methylated C:
- 
+
  1.  SeqID          : sequence ID from reference database
  2.  refPos         : postion of the methylated C on the reference sequence
  3.  refStrand      : strand (will always be '+' when using a reference transcriptome)
@@ -2013,10 +2327,10 @@ meRanCall - RNA cytosine methylation caller
  18. seqContext     : sequence Context arround the mehtylated C
  19. geneName       : gene name associated with the methylated C
  20. candidateName  : name assigned to the methylated C candidate
- 
- The methylation calling process will use (-p) 32 cpus in parallel. 
 
-  
+ The methylation calling process will use (-p) 32 cpus in parallel.
+
+
 ### Paired End reads
 
  For paired end reads a command with analogous options as for single ends can be
@@ -2029,7 +2343,7 @@ meRanCall - RNA cytosine methylation caller
 =head2 methylation calling from RNA-BSseq short reads mapped to a genome
 
 =over 2
- 
+
 ### Single End reads
 
  meRanCall \
@@ -2057,25 +2371,25 @@ meRanCall - RNA cytosine methylation caller
  0.1, that means that we calcultae the probability that the real methylation level lies
  within that interval. Our C->t conversion rate is 0.99 as we determined from a unmethylated
  invitro transcrbed control RNA that was spiked in.
- 
+
  The methylation calling process will use (-p) 23 cpus in parallel.
 
  The result file meRanCallResultGenome.txt is a tab separated and contains the same
  datafields as described above, with the exception, that the 'geneName' field (19)
  will be empty '-', since the meRanG mappers will not add the "ZG" custom tag to
- the SAM lines. 
+ the SAM lines.
 
  However a BED6 + 3 file 'meRanCallResultGenome.bed' will be created in addition to the
  'meRanCallResultGenome.txt' result file. By using the
- 
+
                "meRanAnnotate"
 
  tool from meRanTK you can associate methylated C's in these files (txt/BED) with gene
  (transcript) names. Or use the bed file with any other tool that can intersect BED with
  annotaion files.
- 
- 
- 
+
+
+
 ### Paired End reads
 
  For paired end reads a command with analogous options can be used and in addition
@@ -2099,10 +2413,10 @@ meRanCall - RNA cytosine methylation caller
  Math::CDF
  Bio::DB::Sam
  Parallel::ForkManager
- 
+
  These modules should be availble via CPAN or depending on your OS via the package
  manager.
- 
+
  Bio::DB:Sam requires the samtools libraries (version 0.1.10 or higher, version 1.0
  is not compatible with Bio::DB::Sam, yet) and header files in order to compile
  sucessfully.
@@ -2120,7 +2434,7 @@ Perl 5.18.2 (Centos 6.5)
 =item *
 Perl 5.18.2 (RHEL 6.5)
 
-=back 
+=back
 
 =head1 OPTIONS
 
@@ -2148,12 +2462,12 @@ Perl 5.18.2 (RHEL 6.5)
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation; either version 3 of the License, or
   (at your option) any later version.
-  
+
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
-  
+
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,

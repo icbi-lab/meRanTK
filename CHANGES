@@ -8,6 +8,16 @@
     that have a SNR higher than signalToNoise
     Implement a minimum C filter. Only consider sites that hav a
     minimum of minC Cs.
+
+    Implemented gene level CR. meRanCall can now calculate the CR for
+    each individual gene from a provided GTF file. This CR is than
+    used in the statistical tests for the candidate sites in a
+    corresponding gene.
+
+    Implemented conflict solving for overlapping mates of a read pair.
+    Only one base call, namely the one of the mate with the better
+    quality score, is considered.
+
   - minor fixes
 2019/04/08
 -Version 1.2.1b

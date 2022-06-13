@@ -1,4 +1,4 @@
-image: ubuntu:bionic
+image: continuumio/miniconda3:4.9.2
 
 before_script:
   - apt-get update
@@ -27,10 +27,6 @@ test:
     - cp ./src/meRanCall.pl .
     - cp ./src/meRanGs.pl .
     - cp ./src/meRanGh.pl .
-    - curl -O https://repo.anaconda.com/miniconda/Miniconda3-py39_4.12.0-Linux-x86_64.sh
-    - bash Miniconda3-py39_4.12.0-Linux-x86_64.sh -b -p /opt/conda
-    - /opt/conda/bin/conda init bash
-    - source ~/.bashrc
     - conda env create -f merantk.yml
     - conda activate merantk
     - mv extutils extutils_back

@@ -1,4 +1,278 @@
-STAR 2.6.1c 2018/11/16
+STAR 2.7.10a --- 2021/01/14 ::: New features, behavior changes and bug fixes
+===========================================================================
+**New options and features:**
+* Implemented --soloCellReadStats Standard option to output read statistics for each cell barcode.
+* Allow to define --clip5pAdapterSeq with --clipAdapterType CellRanger4 option.
+* Implemented --soloCBmatchWLtype ED2 to allow mismatches and one insertion+deletion (edit distance <=2) for --soloType CB_UMI_Complex.
+* Implemented Solo BAM tags gx gn: output ';'-separated gene IDs and names for both unique- and multi-gene reads. Note that GX/GN tags are used to output gene ID/name for unique-gene reads.
+* Implemented --soloFeatures GeneFull_ExonOverIntron GeneFull_Ex50pAS options which prioritize exonic over intronic overlaps for pre-mRNA counting.
+* Added script extras/scripts/soloCountMatrixFromBAM.awk to re-create Solo count matrix from the BAM output.
+
+**Changes in behavior:**
+* Changed --soloType CB_samTagOut behavior: if barcode cennot be matched to the passlist, CB:Z:- will be recorded (previously CB tag was absent for such reads).
+* Changed Solo summary statistics outputs in Barcodes.stats and Features.stats files.
+* Changed Solo BAM tags GX GN behavior: for missing values, "-" is output instead of omitting the tag.
+* Changed Solo BAM tags output for multiple --soloFeatures: now the first feature on the list is used for GX,GN,XB,UB tags.
+* Changed Solo SJ behavior: it no longer depends on the whether the alignment is concordant to a Gene.
+* Fixed a bug that resulted in slightly different solo counts if --soloFeatures Gene and GeneFull were used together with --soloCBmatchWLtype 1MM_multi_pseudocounts option.
+
+**Bug fixes**
+
+* PR #1425: Assign supplementary alignment to correct mate when mates fully overlap. Many thanks to Sebastian @suhrig for resolving this problem in the chimeric detection.
+* Fixed a bug introduced in 2.7.9a for --quantMode TranscriptomeSAM output that resulted in both mapped and unmapped output for some reads. Many thanks to Diane Trout (@Caltech) for helping to track this bug.
+* Issue #1223: fixed the N_unmapped value reported in ReadsPerGene.out.tab. The single-end (i.e. partially mapped alignment are not excluded from N_unmapped.
+* Issues #535, #1350: fixed a long-standing problem that resulted in a seg-fault whem mapping to the rabbit genome.
+* Issue #1316: fixed the seg-fault which occurred if --soloType CB_samTagOut and --soloCBwhitelist None are used together.
+* Issue #1177: throw an error in case the BAM file does not contain NH and AS tags for duplication removal jobs (--runMode inputAlignmentsFromBAM --bamRemoveDuplicatesType UniqueIdenticalNotMulti).
+* Issue #1262: fixed the bug that prevented EM matrix output when only EM option is specified in --soloMultiMappers.
+* Issue #1230: fixed the bug that caused seg-faults for --runMode soloCellFiltering runs.
+
+STAR 2.7.9a --- 2021/05/05 ::: STARsolo updates
+=====================================================
+**Major updates:**
+* STARsolo can perform counting of multi-gene (multi-mapping) reads with --soloMultiMappers EM [Uniform Rescue PropUnqiue] options.
+* PR #1163: [SIMDe](https://github.com/simd-everywhere/simde) takes care of correct SIMD extensions based on -m g++ flag: compilation option CXXFLAGS_SIMD is preset to -mavx2, but can be to the desired target architecture. Many thanks to Michael R. Crusoe @mr-c, Evan Nemerson @nemequ and Steffen Möller @smoe!
+
+**New options and features:**
+* New option: --soloUMIfiltering MultiGeneUMI_All to filter out all UMIs mapping to multiple genes (for uniquely mapping reads)
+* New script extras/scripts/calcUMIperCell.awk to calculate total number of UMIs per cell and filtering status from STARsolo matrix.mtx
+* New option: --outSJtype None   to omit outputting splice junctions to SJ.out.tab
+* Simple script to convert BED spliced junctions (SJ.out.tab) to BED12 for UCSC display: extras/scripts/sjBED12.awk
+* PR #1164: SOURCE_DATE_EPOCH to make the build more reproducible
+* PR #1157: print STAR command line and version information to stdout
+
+**Changes in behavior:**
+* Minor changes to statistics output (Features.csv and Summary.csv) to accomodate multimappers.
+* Modified option: ---limitIObufferSize now requires two numbers - separate sizes for input and output buffers
+
+**Bug fixes**
+* PR #1156: clean opal/opal.o
+* Issue #1166: seg-fault for STARsolo --soloCBwhitelist None (no whitelist) with barcodes longer than 16b
+* Issue #1167: STARsolo CR/UR SAM tags are scrambled in TranscriptomeSAM file Aligned.toTranscriptome.out.bam. This bug appeared in 2.7.7a.
+* Issue #1177: Added file checks for the --inputBAMfile .
+* Issue #1180: Output the actual number of alignments in NH attributes even if --outSAMmultNmax is set to a smaller value.
+* Issue #1190: Allow GX/GN output for non-STARsolo runs.
+* Issue #1220: corrupt SAM/BAM files for --outFilterType BySJout. The bug was introduced with the chnages in 2.7.7a.
+* Issue #1211: scrambled CB tags in BAM output for --soloCBwhitelist None --soloFeatures Gene GeneFull.
+* Fixed a bug causing seg-faults with --clipAdapterType CellRanger4 option.
+
+STAR 2.7.8a --- 2021/02/20 ::: Major STARsolo updates
+=====================================================
+
+**Major new features:**
+* ```--runMode soloCellFiltering``` option for cell filtering (calling) of the raw count matrix, without re-mapping
+* Input from SAM/BAM for STARsolo, with options ```--soloInputSAMattrBarcodeSeq``` and ```--soloInputSAMattrBarcodeQual``` to specify SAM tags for the barcode read sequence and qualities
+* ```--clipAdapterType CellRanger4``` option for 5' TSO adapter and 3' polyA-tail clipping of the reads to better match CellRanger >= 4.0.0 mapping results
+* ```--soloBarcodeMate``` to support scRNA-seq protocols in which one of the paired-end mates contains both barcode sequence and cDNA (e.g. 10X 5' protocol)
+
+**New options:**
+* ```--soloCellFilter EmptyDrops_CR``` option for cell filtering (calling) nearly identical to that of CellRanger 3 and 4
+* ```--readFilesSAMattrKeep``` to specify which SAM attributes from the input SAM to keep in the output
+* ```--soloUMIdedup 1M_Directional_UMItools``` option matching the "directional" method in UMI-tools Smith, Heger and Sudbery (Genome Research 2017)
+* ```--soloUMIdedup NoDedup``` option for counting reads per gene, i.e. no UMI deduplication
+* ```--soloUMIdedup 1MM_CR``` option for 1 mismatch UMI deduplication similar to CellRanger >= 3.0
+* ```--soloUMIfiltering MultiGeneUMI_CR``` option filters lower-count UMIs that map to more than one gene matching CellRanger >= 3.0
+* ```--soloCBmatchWLtype 1MM_multi_Nbase_pseudocounts``` options which allows 1MM multimatching to WL for barcodes with N-bases (to better match CellRanger >= 3.0)
+
+**Changes in behavior:**
+* The UMI deduplication/correction specified in ```--soloUMIdedup``` is used for statistics output, filtering and UB tag in BAM output.
+* If UMI or CB are not defined, the UB and CB tags in BAM output will contain "-" (instead of missing these tags).
+* For ```--soloUMIfiltering MultiGeneUMI``` option, the reads with multi-gene UMIs will have UB tag "-" in BAM output.
+* Different ```--soloUMIdedup``` counts, if requested, are recorded in separate .mtx files.
+* Cell-filtered Velocyto matrices are generated using Gene cell filtering.
+* Velocyto spliced/unspliced/ambiguous counts are reported in separate .mtx files.
+* Read clipping options ```--clip*``` now require specifying the values for all read mates, even if they are identical.
+
+**Bug fixes:**
+* Issue #1107: fixed a bug causing seg-fault for ```--soloType SmartSeq``` with only one (pair of) fastq file(s)
+* Issue #1129: fixed an issue with short barcode sequences and ```--soloBarcodeReadLength 0```
+* Issue  #796: Fixed a problem with GX/GN tag output for ```--soloFeatures GeneFull``` option
+* PR: #1012: fix the bug with ```--soloCellFilter TopCells``` option
+* Fixed an issue that was causing slightly underestimated value of Q30 'Bases in RNA read' in ```Solo.out/Gene/Summary.csv```
+
+STAR 2.7.7a --- 2020/12/28
+==========================
+**Major new feature: STARconsensus: mapping RNA-seq reads to consensus genome.**
+* Insert (consensus) variants from a VCF file into the reference genome at the genome generation step with ```--genomeTransformVCF Variants.vcf --genomeTransformType Haploid```
+* Map to the transformed genome. Alignments (SAM/BAM) and spliced junctions (SJ.out.tab) can be transformed back to the original (reference) coordinates with ```--genomeTransformOutput SAM and/or SJ```
+
+**Minor bug fixes:**
+* Deprecated ```--genomeConsensusFile``` option. Please use ```--genomeTransformVCF``` and ```--genomeTransformType``` options instead.
+* Issue #1040: fixed a bug causing rare seg-faults for paired-end --soloType SmartSeq runs.
+* Issue #1071: fixed a bug that can cause a crash for STARsolo runs with a small number of cells.
+
+STAR 2.7.6a --- 2020/09/19
+==========================
+**Major new feature:**
+Output multimapping chimeric alignments in BAM format using
+```--chimMultimapNmax N>1 --chimOutType WithinBAM --outSAMtype BAM Unsorted [and/or] SortedByCoordinate```
+Many thanks to Sebastian @suhrig who implemented this feature!
+More detailed description from Sebastian in PR #802.
+
+**Minor features and bug fixes:**
+* Issue #1008: fixed the problem with Unmapped.out.mate? output for --soloType CB_samTagOut output.
+* PR # 1012: fixed the bug with --soloCellFiltering TopCells option.
+* Issue #786: fixed the bug causing the *Different SJ motifs problem* for overlapping mates.
+* Issue #945: GX/GN can be output for all --soloType, as well as for non-solo runs.
+
+STAR 2.7.5c --- 2020/08/16
+==========================
+Bug-fix release.
+----------------
+
+* Issue #988: proceed reading from GTF after a warning that exon end is past chromosome end.
+* Issue #978: fixed corrupted transcriptInfo.tab in genome generation for cases where GTF file contains extra chromosomes not present in FASTA files.
+* Issue #945: otuput GX/GN for --soloFeatures GeneFull .
+* Implemented removal of control characters from the ends of input read lines, for compatibility with files pre-processed on Windows.
+
+STAR 2.7.5b --- 2020/08/01
+==========================
+Bug-fix release.
+----------------
+
+* Issue #558: Fixed a bug that can cause a seg-fault in STARsolo run with paired-end reads that have protruding ends.
+* Issue #952: Increased the maximum allowed length of the SAM tags in the input SAM files.
+* Issue #955: fixed seg-fault-causing bug for --soloFeatures SJ option.
+* Issue #963: When reading GTF file, skip any exons that extend past the end of the chromosome, and give a warning.
+* Issue #965: output genome sizes with and without padding into Log.out.
+* Docker build: switched to debian:stable-slim in the Dockerfile.
+* --soloType CB_samTagOut now allows output of (uncorrected) UMI sequences and quality scores with SAM tags UR and UY.
+* Throw an error if FIFO file cannot be created on non-Linux partitions.
+
+STAR 2.7.5a 2020/06/16
+======================
+**Major new features:**
+* Implemented STARsolo quantification for Smart-seq with --soloType SmartSeq option.
+* Implemented --readFilesManifest option to input a list of input read files.
+
+**Minor features and bug fixes:**
+* Change in STARsolo SJ output behavior: junctions are output even if reads do not match genes.
+* Fixed a bug with solo SJ output for large genomes.
+* N-characters in --soloAdapterSequence are not counted as mismatches, allowing for multiple adapters (e.g. ddSeq).
+* SJ.out.tab is sym-linked as features.tsv for Solo SJ output.
+* Issue #882: 3rd field is now optional in Solo Gene features.tsv with --soloOutFormatFeaturesGeneField3.
+* Issue #883: Patch for FreeBSD in SharedMemory and Makefile improvements.
+* Issue #902: Fixed seg-fault for STARsolo CB/UB SAM attributes output with --soloFeatures GeneFull --outSAMunmapped Within options.
+* Issue #934: Fixed a problem with annotated junctions that was causing very rare seg-faults.
+* Issue #936: Throw an error if an empty whitelist is provided to STARsolo.
+
+STAR 2.7.4a 2020/06/01
+======================
+Fixing multiple bugs and issues.
+--------------------------------
+
+**This version requires re-generation of the genome indexes**
+
+* Fixed the long-standing seg-fault problem for small genomes.
+* Issue #784: Fixed a seg-fault in STARsolo for cases where no cell barcodes matched whitelist.  
+* Issue #798: Fixed the problem in Solo Q30 Bases in Summary.csv average (#798).
+* Issue #843, #880: Throw an error if read file in --readFilesIn does not exist when using --readFilesCommand .
+* Issue #864: Fixed seg-fault for STARsolo runs with very small number of reads or cells.
+* Issue #881: Check if --genomeDir exists, create if necessary.
+* Issue #882: Added 3rd column "Gene Expression" to solo features.tsv file for better compatibility with downstream tools.
+* Issue #902: Fixed seg-fault for STARsolo CB/UB SAM attributes output with --soloFeatures GeneFull only option.
+* Issue #907: Fixed the bug that prevented output of STARsolo GX/GN tags into the Aligned.out.bam if --quantMode TranscriptomeSAM is used.
+* Issue #910: The output directory in --outFileNamePrefix is checked and created if it does not exist.
+* If solo barcode read length is not checked (--soloBarcodeReadLength 0) and it is shorter than CB+UMI length, the barcode is padded with Ns and not counted.
+* For genome generation runs, the Log.out file is moved into the --genomeDir directory.
+* Fixed a bug with solo SJ output for large genomes.
+* Implemented --seedMapMin option (previously hard-coded) to define minimum seed length.
+
+STAR 2.7.3a 2019/10/08
+======================
+Major new features in STARsolo
+------------------------------
+* **Output enhancements:**
+    * Summary.csv statistics output for raw and filtered cells useful for quick run quality assessment.
+    * --soloCellFilter option for basic filtering of the cells, similar to the methods used by CellRanger 2.2.x.
+* [**Better compatibility with CellRanger 3.x.x:**](docs/STARsolo.md#matching-cellranger-3xx-results)
+    * --soloUMIfiltering MultiGeneUMI option introduced in CellRanger 3.x.x for filtering UMI collisions between different genes.
+    * --soloCBmatchWLtype 1MM_multi_pseudocounts option, introduced in CellRanger 3.x.x, which slightly changes the posterior probability calculation for CB with 1 mismatch.
+* [**Velocyto spliced/unspliced/ambiguous quantification:**](docs/STARsolo.md#velocyto-splicedunsplicedambiguous-quantification)
+    * --soloFeatures Velocyto option to produce Spliced, Unspliced, and Ambiguous counts similar to the [velocyto.py](http://velocyto.org/) tool developed by [LaManno et al](https://doi.org/10.1038/s41586-018-0414-6). This option is under active development and the results may change in the future versions.
+* [**Support for complex barcodes, e.g. inDrop:**](docs/STARsolo.md#barcode-geometry)
+    * Complex barcodes in STARsolo with --soloType CB_UMI_Complex, --soloCBmatchWLtype --soloAdapterSequence, --soloAdapterMismatchesNmax, --soloCBposition,--soloUMIposition
+* [**BAM tags:**](#bam-tags)
+    * CB/UB for corrected CellBarcode/UMI
+    * GX/GN for gene ID/name
+* STARsolo most up-to-date [documentation](docs/STARsolo.md).
+
+
+STAR 2.7.2d 2019/10/04
+======================
+* Fixed the problem with no header in Chimeric.out.sam
+
+STAR 2.7.2c 2019/10/02
+======================
+* Fixed the problem with no output to Chimeric.out.sam
+
+STAR 2.7.2b 2019/08/29
+======================
+Bug fixes in chimeric detection, contributed by Meng Xiao He (@mengxiao)
+* Fix memory leak in handling chimeric multimappers: #721
+* Ensure chimeric alignment score requirements are consistently checked: #722,#723.
+
+STAR 2.7.2a 2019/08/13
+======================
+* Chimeric read reporting now requires that the chimeric read alignment score higher than the alternative non-chimeric alignment to the reference genome.  The Chimeric.out.junction file now includes the scores of the chimeric alignments and non-chimeric alternative alignments, in addition to the PEmerged bool attribute. (bhaas, Aug 2019)
+* Fixed the problem with ALT=* in STAR-WASP.
+* Implemented extras/scripts/soloBasicCellFilter.awk script to perform basic filtering of the STARsolo count matrices.
+* Fixed a bug causing rare seg-faults with for --peOverlap* options and chimeric detection.
+* Fixed a problem in STARsolo with unmapped reads counts in Solo.out/*.stats files.
+* Fixed a bug in STARsolo with counting reads for splice junctions. Solo.out/matrixSJ.mtx output is slighlty changed.
+* Fixed the problem with ALT=* in VCF files for STAR-WASP.
+
+STAR 2.7.1a 2019/05/15
+======================
+**This version requires re-generation of the genome indexes**
+
+* Implemented --soloFeatures GeneFull which counts reads overlapping full genes, i.e. includes reads that overlap introns. This can be combined with other features, e.g. --soloFeatures Gene SJ GeneFull .
+* Implemented --soloCBwhitelist None option for solo* demultiplexing without CB whitelist. In this case error correction for CBs is not performed.
+* Implemented Cell Barcodes longer than 16 bases (but shorter than 31 bases). Many thanks to Gert Hulselmans for implementing this feature (#588).
+* Implemented collapsing of duplicate cell barcodes in the whitelist.
+* Implemented --sjdbGTFtagExonParentGeneName and --sjdbGTFtagExonParentGeneType options to load gene name and biotype attributes from the GTF file.
+* Fixed problems created by missing gene/transcript ID, name and biotype attributes in GTF files (issues #613, #628).
+* Added warning for incorrectly scaled --genomeSAindexNbases parameter (issue #614).
+* Added numbers of unmapped reads to the Log.final.out file (pull #622).
+* Fixed a problem which may cause seg-faults for reads with many blocks (issue #342).
+
+STAR 2.7.0f 2019/03/28
+======================
+* Fixed a problem in STARsolo with empty Unmapped.out.mate2 file. Issue #593.
+* Fixed a problem with CR CY UR UQ SAM tags in solo output. Issue #593.
+* Fixed problems with STARsolo and 2-pass.
+
+STAR 2.7.0e 2019/02/25
+======================
+* Fixed problems with --quantMode GeneCounts and --parametersFiles options
+
+STAR 2.7.0d 2019/02/19
+======================
+* Implemented --soloBarcodeReadLength option for barcode read length not equal to the UMI+CB length
+* Enforced genome version rules for 2.7.0
+
+STAR 2.7.0c 2019/02/08
+======================
+* This release is compiled with gcc-4.8.5, and requires at least gcc-4.8.5
+* Fixed another problem in STARsolo genes.tsv output.
+* Replaced tabs with spaces in STARsolo matrix.mtx output
+* #559, #562 Fixed compilation problems.
+* #550 (again, previous merge failed): Added correct header for the STARsolo matrix.mtx file, needed for python scipy mmread compatibility.
+
+STAR 2.7.0b 2019/02/05
+======================
+* #550: Added correct header for the STARsolo matrix.mtx file, needed for python scipy mmread compatibility.
+* #556: Fixed a problem with STARsolo genes.tsv file, which may also cause troubles with GTF files processing.
+* Important: 2.7.0x releases require re-generation of the genome index.
+
+STAR 2.7.0a 2019/01/23
+======================
+* This release introduces STARsolo for: mapping, demultiplexing and gene quantification for single cell RNA-seq.
+* Multiple solo\* options control STARsolo algorithm. See the RELEASEnotes and the manual for more information.
+* This release is compiled with gcc-5.3.0, and requires at least gcc-4.9.4
+
+
+STAR 2.6.1d 2018/11/16
 ======================
 
 * Fixed the problem causing BAM sorting error with large number of threads and small ulimit -n (github.com/alexdobin/STAR/issues/512).
@@ -115,7 +389,7 @@ STAR 2.5.2b 2016/08/19
 STAR 2.5.2a 2016/05/10
 ======================
 
-* Fixed the "GstrandBit" problem. 
+* Fixed the "GstrandBit" problem.
 * Fixed a bug introduced in 2.5.1a that caused problems with single-end alignments output in some cases.
 * Fixed a bug that can cause STARlong seg-faults in rare cases.
 * Fixed a bug that caused output of unmapped mates for single end alignments even with --outSAMunmapped None .
@@ -173,7 +447,7 @@ Major new features:
 -------------------
 * Implemented on the fly insertion of the extra sequences into the genome indexes.
 * Implemented --outSAMmultNmax parameter to limit the number of output alignments for multimappers.
-* Implemented --outMultimapperOrder Random option to output multiple alignments in random order. 
+* Implemented --outMultimapperOrder Random option to output multiple alignments in random order.
     This also randomizes the choice of the primary alignment. Parameter --runRNGseed can be used to set the random generator seed.
     With this option, the ordering of multi-mapping alignments of each read, and the choice of the primary alignment will vary from run to run, unless only one thread is used and the seed is kept constant.
 
@@ -253,7 +527,7 @@ STAR 2.4.1a 2015/04/17
 * Included link (submodule) to Brian Haas' STAR-Fusion code for detecting fusion transcript from STAR chimeric output:  https://github.com/STAR-Fusion/STAR-Fusion
 * Included Gery Vessere's shared memory implementation for POSIX and SysV. To compile STAR with POSIX shared memory, use `make POSIXSHARED`
 * New option "--chimOutType WithinBAM" to include chimeric alignments together with normal alignments in the main (sorted or unsorted) BAM file(s).
-* New option "--quantTranscriptomeBan Singleend" allows insertions, deletions ans soft-clips in the transcriptomic alignments, which are allowed by some expression quantification software (e.g. eXpress). 
+* New option "--quantTranscriptomeBan Singleend" allows insertions, deletions ans soft-clips in the transcriptomic alignments, which are allowed by some expression quantification software (e.g. eXpress).
 * New option "--alignEndsTypeExtension Extend5pOfRead1" to enforce full extension of the 5p of the read1, while all other ends undergo local alignment and may be soft-clipped.
 
 2.4.0k 03/30/2015
@@ -377,8 +651,8 @@ Fixed problem with FASTA reads input.
 Fixed problem with compilation, samtools/ZLIB related.
 
 2.3.1z9 06/19/2014
-2.3.1z8 
-2.3.1z7 
+2.3.1z8
+2.3.1z7
 Fixed problems with transcriptomic output.
 Changed --sjdbFileChrStartEnd importing to allow direct import from SJ.out.tab
 
@@ -397,7 +671,7 @@ Fixed chimeric output problems with --outFilterType BySJout option
 Added extra Log.out messages for multi-threaded jobs.
 
 2.3.1z1 03/13/2014
-SAM header changes: 
+SAM header changes:
     removed "cl:" attribute from the @PG line, output it as a separate comment line
     added --outSAMheaderHD, --outSAMheaderPG, --outSAMheaderCommentFile options
 Added --outTmpDir, which set the path forSTAr temporary directory independent of --outFileNamePrefix
@@ -493,4 +767,3 @@ Fixed possible issue which in some cases could have resulted in empty Chimeric.o
 Fixed incorrect processing of --sjdbGTFchrPrefix.
 
 2.3.0e
-

@@ -29,8 +29,8 @@ test:
     - cp ./src/meRanGh.pl .
     - curl -O https://repo.anaconda.com/miniconda/Miniconda3-py39_4.12.0-Linux-x86_64.sh
     - bash Miniconda3-py39_4.12.0-Linux-x86_64.sh -b -p /opt/conda
+    - /opt/conda/bin/conda init bash
     - conda env create -f merantk.yml
-    - conda init bash
     - source ~/.bashrc
     - conda activate merantk
     - mv extutils extutils_back

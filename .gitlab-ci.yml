@@ -27,6 +27,9 @@ test:
     - cp ./src/meRanCall.pl .
     - cp ./src/meRanGs.pl .
     - cp ./src/meRanGh.pl .
+    - conda config --add channels defaults
+    - conda config --add channels bioconda
+    - conda config --add channels conda-forge
     - conda env create -f merantk.yml
     - conda activate merantk
     - mv extutils extutils_back

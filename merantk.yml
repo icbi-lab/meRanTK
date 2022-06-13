@@ -7,7 +7,7 @@ channels:
   - defaults
 dependencies:
   - python=3.9
-  - bioconda::perl
+  - conda-forge::perl
   - bioconda::perl-text-nsp
   - bioconda::perl-gd
   - bioconda::perl-bio-samtools

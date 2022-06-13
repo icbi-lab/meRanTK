@@ -16,6 +16,7 @@ dependencies:
   - bioconda::perl-mce
   - bioconda::perl-math-cdf
   - bioconda::perl-parallel-forkmanager
+  - bioconda::perl-list-moreutils-xs
   - bioconda::star=2.7.10a
   - bioconda::bowtie2=2.4.5
   - bioconda::hisat2=2.2.1

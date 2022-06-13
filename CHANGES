@@ -1,7 +1,7 @@
-2022/05/18
+2022/06/13
 -Version 1.3.0
   - meRanCall:
-    Implement C-cutoff filter. Removes reads from poor conversion
+    Implemented a C-cutoff filter. Removes reads from poor conversion
     in the sense that if a read has more than C_cutoff Cs it will
     not be considered in m5C calling.
     Implement signal to noise ratio filter. Only consider sites
@@ -17,6 +17,13 @@
     Implemented conflict solving for overlapping mates of a read pair.
     Only one base call, namely the one of the mate with the better
     quality score, is considered.
+
+  - updated third party programs: STAR, HiSat2, bowtie2
+
+  - provide a conda env YML file for meRanTK
+
+  - added support for the current RefSeq mRNA fasta files from NCBI
+    in the mkRefSeq2GeneMap.pl utility.
 
   - minor fixes
 2019/04/08

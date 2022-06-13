@@ -43,7 +43,7 @@ use Parallel::ForkManager;
 use List::Util qw(max min sum);
 use Bio::DB::Sam;
 
-my $VERSION = '1.2.1b';
+my $VERSION = '1.3.0';
 my $version;
 my $help;
 my $man;
@@ -62,15 +62,17 @@ use constant {
                READ_CACHE_SIZE_SE => 40_000,
                READ_CACHE_SIZE_PE => 15_000,
                SAM_CHUNK_SIZE     => 10_000,
-               SAM_CHUNK_SIZE_MM  => 1_000,               
+               SAM_CHUNK_SIZE_MM  => 1_000,
                };
 
 # List of supported HISAT2 versions
-my %supportedHiSat2Versions = ( 
+my %supportedHiSat2Versions = (
                                  '2.0.4'  => 1,
+                                 '2.2.1'  => 1,
                                 );
-my %notSupportedOpts         = ( 
+my %notSupportedOpts         = (
                                  '2.0.4'  => [],
+                                 '2.2.1'  => [],
                                 );
 my $hisat2Version           = "";
 
@@ -176,13 +178,13 @@ my %run_opts = (
     'hisat2_no-spliced-alignment' => undef,
     # 'hisat2_rna-strandness' => "FR", # determined later
     'hisat2_transcriptome-mapping-only' => undef,
-    
+
     'hisat2_remove-chrname' => undef,
     'hisat2_add-chrname' => undef,
     'hisat2_omit-sec-seq' => undef,
     'hisat2_offrate' => undef,
-    
-    
+
+
     'hisat2_ma' => undef,
     'hisat2_mp' => undef, # "6,2",
     'hisat2_sp' => undef, # "1,2",
@@ -191,20 +193,17 @@ my %run_opts = (
     'hisat2_rfg' => undef, # "5,3",
     'hisat2_score-min' => undef, # "L,0.0,-0.2",
     'hisat2_k' => undef,
-    
+
     'hisat2_minins' => undef, # 0,
     'hisat2_maxins' => undef, # 500,
-    
-    
-    'hisat2_dovetail' => \$allowDoveTail,
-    
+
     'hisat2_met-file' => undef
 
     );
 ####### End default options ########
 
 my @offONopts = (
-                  'dovetail',         'ignore-quals',
+                  'ignore-quals',
                   'nofw', 'norc', 'no-temp-splicesite',
                   'no-spliced-alignment', 'transcriptome-mapping-only',
                   'remove-chrname', 'add-chrname',
@@ -297,13 +296,13 @@ GetOptions(
     'hisat2_no-spliced-alignment',
     'hisat2_rna-strandness=s',
     'hisat2_transcriptome-mapping-only',
-    
+
     'hisat2_remove-chrname',
     'hisat2_add-chrname',
     'hisat2_omit-sec-seq',
     'hisat2_offrate=i',
-    
-    
+
+
     'hisat2_ma=i',
     'hisat2_mp=s',
     'hisat2_sp=s',
@@ -312,10 +311,10 @@ GetOptions(
     'hisat2_rfg=s',
     'hisat2_score-min=s',
     'hisat2_k=i',
-    
+
     'hisat2_minins=i',
     'hisat2_maxins=i',
-    
+
     'hisat2_met-file=s'
 
     );
@@ -580,7 +579,7 @@ my $firstNreadsTotal = $firstNreads * $readCountFactor;
 
 my @hisat2args;
 my $cmd_vals;
-if ($GTF) {    
+if ($GTF) {
     my ( $fname, $fpath, $fsuffix ) = fileparse( $GTF, qw(\.gtf \.GTF) );
     $spliceSitesFile = $outDir . "/" . $fname . "_splice_sites_" . $$ . ".txt";
     extractSpliceSites();
@@ -748,7 +747,7 @@ Total # of reads:                                    " . $sl1 . "
 Total # of mapped reads:                             " . $sl2 . "
 Total # of unmapped reads:                           " . $sl3 . "
 Total # of unmapped + multimapper reads:             " . $sl4 . "
-Reads mapping to multiple places on reference:       " . $sl5 . " 
+Reads mapping to multiple places on reference:       " . $sl5 . "
 Reads mapped to uniq place on reference:             " . $sl6 . "
 ----------------------------------------------------------------------------
 
@@ -814,7 +813,7 @@ sub cleanup {
     my $hisat2_G2A_files;
     my $hisat2_C2T_genomeFiles;
     my $hisat2_G2A_genomeFiles;
-    
+
     if ($tmpDir) {
         $hisat2_C2T_files = $tmpDir . "/meRanGh_C2T_" . $$ . "_hisat2_";
         $hisat2_G2A_files = $tmpDir . "/meRanGh_G2A_" . $$ . "_hisat2_";
@@ -979,9 +978,9 @@ sub checkChild {
           . $exit_code . "\n";
     }
     else {
-        print "** caught unknown process, with ident: " 
-          . $ident 
-          . " PID: " 
+        print "** caught unknown process, with ident: "
+          . $ident
+          . " PID: "
           . $pid
           . " and exit code: "
           . $exit_code . "\n";
@@ -1062,7 +1061,7 @@ sub _runHiSat2Indexer {
     my $idxfailed = 0;
 
     local(*HISAT2_OUT, *HISAT2_ERR);
-    
+
     my $hisat2OUT = \*HISAT2_OUT;
     my $hisat2ERR = \*HISAT2_ERR;
 
@@ -1143,7 +1142,7 @@ sub runHiSat2 {
 
     my $hisat2Dir_C2T;
     my $hisat2Dir_G2A;
-    
+
     if ($tmpDir) {
         $hisat2Dir_C2T = $tmpDir . "/meRanGh_C2T_" . $$ . "_hisat2_";
         $hisat2Dir_G2A = $tmpDir . "/meRanGh_G2A_" . $$ . "_hisat2_";
@@ -1153,12 +1152,12 @@ sub runHiSat2 {
         $hisat2Dir_G2A = $outDir . "/meRanGh_G2A_" . $$ . "_hisat2_";
     }
 
-    my @hisat2C2Tcmd  = ( @$hisat2cmd, "-x $hisat2_C2T_idx");
-    my @hisat2G2Acmd  = ( @$hisat2cmd, "-x $hisat2_G2A_idx");
+    my $hisat2C2Tcmd  = join(' ', ( @$hisat2cmd, "-x $hisat2_C2T_idx" ));
+    my $hisat2G2Acmd  = join(' ', ( @$hisat2cmd, "-x $hisat2_G2A_idx" ));
 
     # fork the HiSat2 mapper processes
-    my $pid_C2T = open( my $HISAT2_C2T, "-|", @hisat2C2Tcmd ) || die($!);
-    my $pid_G2A = open( my $HISAT2_G2A, "-|", @hisat2G2Acmd ) || die($!);
+    my $pid_C2T = open( my $HISAT2_C2T, "-|", $hisat2C2Tcmd ) || die($!);
+    my $pid_G2A = open( my $HISAT2_G2A, "-|", $hisat2G2Acmd ) || die($!);
 
     $HISAT2_C2T->autoflush(1);
     $HISAT2_G2A->autoflush(1);
@@ -1945,7 +1944,7 @@ sub meRanSAManalyzerSE {
 
         my $softClippedBases = splice(@$finalAlignment, $#$finalAlignment - 2, 1);
         my %auxTags = samGet_auxTags(@$finalAlignment);
-        
+
         $auxTags{NH}{t} = "i";
         $auxTags{NH}{v} = $NH;
 
@@ -2758,7 +2757,7 @@ sub meRanSAManalyzerPE {
 
         # G2A
         my $AS_G2A = getASpaired($pairedAlignment_G2A) // -1_000_000;
-        
+
 
         if ( $AS_C2T > $AS_G2A ) {
             $finalAlignments = \@finalSMalignments;
@@ -2915,11 +2914,14 @@ sub meRanSAManalyzerPE {
         my $fwdMateMappedLength;
         my $revMateMappedLength;
 
-        if ( defined( $finalAlignmentPair->[0] ) && defined( $finalAlignmentPair->[1] ) ) {
+        if ( defined( $finalAlignmentPair->[0] ) || defined( $finalAlignmentPair->[1] ) ) {
             $softClippedBases    = $finalAlignmentPair->[2]->[0];
             $fwdMateMappedLength = $finalAlignmentPair->[2]->[1];
             $revMateMappedLength = $finalAlignmentPair->[2]->[2];
             $mateOverlap         = $getMateOverlap->( $finalAlignmentPair, $fwdMateMappedLength, $revMateMappedLength );
+        }
+        else {
+            return ( undef, undef, undef, undef );
         }
 
         foreach my $finalAlignment ( @$finalAlignmentPair[ 0 .. 1 ] ) {
@@ -3104,7 +3106,7 @@ sub filterPEalignments {
             ( ( $sortedPairedAlignment->[0]->[2] ne $sortedPairedAlignment->[1]->[2] ) )
 
             || (    ( ( $sortedPairedAlignment->[0]->[1] & 0x2 ) == 0 )
-                 && ( ( $sortedPairedAlignment->[1]->[1] & 0x2 ) == 0 ) 
+                 && ( ( $sortedPairedAlignment->[1]->[1] & 0x2 ) == 0 )
                  && ( !defined($allowDoveTail) ) )
 
             || (    ( ( $sortedPairedAlignment->[0]->[1] & 0x10 ) != 0 )
@@ -3122,19 +3124,19 @@ sub filterPEalignments {
           )
         {
             &$debug( $sortedPairedAlignment->[0]->[0]
-                     . " " 
-                     . $sortedPairedAlignment->[0]->[1] 
-                     . " " 
-                     . $sortedPairedAlignment->[0]->[2] 
-                     . ":" 
-                     . $sortedPairedAlignment->[0]->[3] 
-                     . " <-> " . $sortedPairedAlignment->[1]->[0] 
-                     . " " 
-                     . $sortedPairedAlignment->[1]->[1] 
-                     . " " 
-                     . $sortedPairedAlignment->[1]->[2] 
-                     . ":" 
-                     . $sortedPairedAlignment->[1]->[3] 
+                     . " "
+                     . $sortedPairedAlignment->[0]->[1]
+                     . " "
+                     . $sortedPairedAlignment->[0]->[2]
+                     . ":"
+                     . $sortedPairedAlignment->[0]->[3]
+                     . " <-> " . $sortedPairedAlignment->[1]->[0]
+                     . " "
+                     . $sortedPairedAlignment->[1]->[1]
+                     . " "
+                     . $sortedPairedAlignment->[1]->[2]
+                     . ":"
+                     . $sortedPairedAlignment->[1]->[3]
                      . " map discordantly",
                      "Line:", __LINE__ );
             $mappingStatsC{discordantAL} += 2;
@@ -3166,7 +3168,7 @@ sub filterPEalignments {
                 &$debug( $sortedPairedAlignment->[$i]->[0] . ": to many missmatches or edit distance exceeded",
                          "Line:", __LINE__ );
                 $sortedPairedAlignment->[$i] = undef;
-            }            
+            }
             $i++;
         }
         if ( defined( $sortedPairedAlignment->[0] ) || defined( $sortedPairedAlignment->[1] ) ) {
@@ -3212,19 +3214,19 @@ sub filterPEalignments {
           )
         {
             &$debug( $sortedPairedAlignment->[0]->[0]
-                     . " " 
-                     . $sortedPairedAlignment->[0]->[1] 
-                     . " " 
-                     . $sortedPairedAlignment->[0]->[2] 
-                     . ":" 
-                     . $sortedPairedAlignment->[0]->[3] 
-                     . " <-> " . $sortedPairedAlignment->[1]->[0] 
-                     . " " 
-                     . $sortedPairedAlignment->[1]->[1] 
-                     . " " 
-                     . $sortedPairedAlignment->[1]->[2] 
-                     . ":" 
-                     . $sortedPairedAlignment->[1]->[3] 
+                     . " "
+                     . $sortedPairedAlignment->[0]->[1]
+                     . " "
+                     . $sortedPairedAlignment->[0]->[2]
+                     . ":"
+                     . $sortedPairedAlignment->[0]->[3]
+                     . " <-> " . $sortedPairedAlignment->[1]->[0]
+                     . " "
+                     . $sortedPairedAlignment->[1]->[1]
+                     . " "
+                     . $sortedPairedAlignment->[1]->[2]
+                     . ":"
+                     . $sortedPairedAlignment->[1]->[3]
                      . " map discordantly",
                      "Line:", __LINE__ );
             $mappingStatsC{discordantAL} += 2;
@@ -4201,7 +4203,7 @@ sub bsconvertFQpe {
         # check if reads are properly paired
         if ( substr( $FWDfq_rec{id}, 0, -2 ) ne substr( $REVfq_rec{id}, 0, -2 ) ) {
             &$debug( substr( $FWDfq_rec{id}, 0, -2 ), "<--->", substr( $REVfq_rec{id}, 0, -2 ), "Line:", __LINE__ );
-            die(   $FWDfq . " and " 
+            die(   $FWDfq . " and "
                  . $REVfq
                  . " are not properly paired, you may use pairfq \(S. Evan Staton\) tool to pair and sort the mates" );
         }
@@ -4452,7 +4454,7 @@ sub fqSpooler {
     $fifoout->autoflush(1);
     foreach my $fqF ( @{$fqFs} ) {
         $lineCounter = 0;
-        
+
         my $gzip = 0;
         my $fq;
 
@@ -4931,10 +4933,10 @@ sub plot_mBias {
 sub extractSpliceSites {
     my $genes;
     my $trans;
-    
+
     my $gtfFH = IO::File->new( $GTF, O_RDONLY | O_EXCL ) || die( $GTF . ": " . $! );
     my $line;
-    
+
     while ( defined( $line = $gtfFH->getline() ) ) {
         chomp($line);
 
@@ -4969,7 +4971,7 @@ sub extractSpliceSites {
             push( @{ $trans->{$transcript_id}->[2] }, [ $left, $right ] );
         }
     }
-    
+
     $gtfFH->close();
     undef($gtfFH);
 
@@ -5010,7 +5012,7 @@ sub extractSpliceSites {
             $seen->{$key} = 1;
         }
     }
-    
+
     my @junctions_s = sort { ( $a->[0] cmp $b->[0] ) ||  ( $a->[1] <=> $b->[1] ) || ( $a->[2] <=> $b->[2] ) } @junctions;
 
     my $spliceSitesFH   = IO::File->new( $spliceSitesFile, O_RDWR | O_CREAT | O_TRUNC ) || die( $spliceSitesFile . ": " . $! );
@@ -5023,7 +5025,7 @@ sub extractSpliceSites {
 
         $spliceSitesFH->print( join( "\t", ( $chrom, $left, $right, $strand ) ) . "\n" );
     }
-    
+
     $spliceSitesFH->close();
     undef($spliceSitesFH);
 }
@@ -5104,7 +5106,7 @@ sub checkFastQsort {
 
 sub nicePath {
     my $rawPath = shift;
-    
+
     $rawPath =~ s/\/+/\//g;
     return($rawPath);
 }
@@ -5123,7 +5125,7 @@ Options:
     --version   :   Print the program version and exit.
     -h|help     :   Print the program help information.
     -m|man      :   Print a detailed documentation.
-    
+
 EOF
 }
 
@@ -5144,11 +5146,11 @@ Required all of :
 
     -id|bsidxdir        : Directory where to store the BS index.
 
-Options:                          
+Options:
     -hisat2build|hs2b   : Path to the HiSat2 "hisat2-build" program.
                           (default: hisat2-build from the meRanTK installation
                            or systems PATH)
-                          
+
     -t|threads          : number of CPUs/threads to run
 
     --version           : Print the program version and exit.
@@ -5226,7 +5228,7 @@ Options:
 
     -deleteBAMus|-dbus    : Delete the unsorted BAM files after sorting BAM.
                             (default: not set)
-                            
+
     -hisat2un|-un        : Report unaligned reads. See also -unalDir|-ud
                             (default: not set)
 
@@ -5274,132 +5276,132 @@ Options:
 
     -hisat2_trim5
                           : see hisat2 manual for -trim5 option
-                            (default: 0)    
+                            (default: 0)
 
     -hisat2_trim3
                           : see hisat2 manual for -trim3 option
-                            (default: 0)    
+                            (default: 0)
     -hisat2_n-ceil
                           : see hisat2 manual for -n-ceil option
-                            (default: L,0,0.15)    
+                            (default: L,0,0.15)
     -hisat2_ignore-quals
                           : see hisat2 manual for -ignore-quals option
-                            (default: not set)    
+                            (default: not set)
 
     -hisat2_nofw
                           : see hisat2 manual for -nofw option
-                            (default: not set)    
+                            (default: not set)
 
     -hisat2_norc
                           : see hisat2 manual for -norc option
-                            (default: not set)    
+                            (default: not set)
 
     -hisat2_pen-canonsplice
                           : see hisat2 manual for -pen-canonsplice option
-                            (default: 0)    
+                            (default: 0)
 
     -hisat2_pen-noncanonsplice
                           : see hisat2 manual for -pen-noncanonsplice option
-                            (default: 12)    
+                            (default: 12)
 
     -hisat2_pen-canintronlen
                           : see hisat2 manual for -pen-canintronlen option
-                            (default: G,-8,1)    
+                            (default: G,-8,1)
 
     -hisat2_pen-noncanintronlen
                           : see hisat2 manual for -pen-noncanintronlen option
-                            (default: G,-8,1)    
+                            (default: G,-8,1)
 
     -hisat2_min-intronlen
                           : see hisat2 manual for -min-intronlen option
-                            (default: 20)        
+                            (default: 20)
 
     -hisat2_max-intronlen
                           : see hisat2 manual for -may-intronlen option
-                            (default: 500000)        
+                            (default: 500000)
 
     -hisat2_novel-splicesite-outfile
                           : see hisat2 manual for -novel-splicesite-outfile option
-                            (default: not set)        
+                            (default: not set)
 
     -hisat2_novel-splicesite-infile
                           : see hisat2 manual for -novel-splicesite-infile option
-                            (default: not set)        
+                            (default: not set)
 
     -hisat2_no-temp-splicesite
                           : see hisat2 manual for -no-temp-splicesite option
-                            (default: not set)        
+                            (default: not set)
 
     -hisat2_no-spliced-alignment
                           : see hisat2 manual for -no-spliced-alignment option
-                            (default: not set)        
+                            (default: not set)
 
     -hisat2_rna-strandness
                           : see hisat2 manual for -rna-strandness option
-                            (default: FR)        
+                            (default: FR)
 
     -hisat2_transcriptome-mapping-only
                           : see hisat2 manual for -transcriptome-mapping-only option
-                            (default: not set)        
+                            (default: not set)
 
     -hisat2_remove-chrname
                           : see hisat2 manual for -remove-chrname option
-                            (default: not set)        
+                            (default: not set)
 
     -hisat2_add-chrname
                           : see hisat2 manual for -add-chrname option
-                            (default: not set)        
+                            (default: not set)
 
     -hisat2_omit-sec-seq
                           : see hisat2 manual for -omit-sec-seq option
-                            (default: not set)        
+                            (default: not set)
 
     -hisat2_offrate
                           : see hisat2 manual for -offrate option
-                            (default: not set)        
+                            (default: not set)
 
     -hisat2_ma
                           : see hisat2 manual for -ma option
-                            (default: not set)        
+                            (default: not set)
     -hisat2_mp
                           : see hisat2 manual for -mp option
-                            (default: 6,2)        
+                            (default: 6,2)
 
     -hisat2_sp
                           : see hisat2 manual for -sp option
-                            (default: 1,2)        
+                            (default: 1,2)
 
     -hisat2_np
                           : see hisat2 manual for -np option
-                            (default: 1)        
+                            (default: 1)
 
     -hisat2_rdg
                           : see hisat2 manual for -rdg option
-                            (default: 5,3)        
+                            (default: 5,3)
 
     -hisat2_rfg
                           : see hisat2 manual for -rfg option
-                            (default: 5,3)        
+                            (default: 5,3)
 
     -hisat2_min-score
                           : see hisat2 manual for -min-score option
-                            (default: L,0.0,-0.2)        
+                            (default: L,0.0,-0.2)
 
     -hisat2_k
                           : see hisat2 manual for -k option
-                            (default: not set)        
+                            (default: not set)
 
     -hisat2_minins
                           : see hisat2 manual for -minins option
-                            (default: 0)        
+                            (default: 0)
 
     -hisat2_maxins
                           : see hisat2 manual for -maxins option
-                            (default: 500)        
+                            (default: 500)
 
     -hisat2_met-file
                           : see hisat2 manual for -met-file option
-                            (default: not set)        
+                            (default: not set)
 
     --version             : Print the program version and exit.
     -h|help               : Print the program help information.
@@ -5427,7 +5429,7 @@ meRanGh - RNA bisulfite short read mapping to genome
     -fa mm10.chr1.fa,mm10.chr2.fa,[...] \
     -id /export/data/mm10/BSgenomeIDX \
 
- Generates an index for bisulfite mapping strand specific RNA-BSseq reads to a 
+ Generates an index for bisulfite mapping strand specific RNA-BSseq reads to a
  genome database provided as fasta file(s)) (e.g. from genome assembly mm10).
  The indexer will run with max. (-t) 4 threads.
 
@@ -5436,11 +5438,11 @@ meRanGh - RNA bisulfite short read mapping to genome
  from the meRanTK shipped third party programs is used (see Installation 2.2, 2.3).
  Alternatively, the path to “hisat2-build” can be specified using
  the command line options (-hs2b).
- 
+
 =head2 Align directed/strand specific RNA-BSseq short reads to a genome
 
 =over 2
- 
+
 ### Single End reads
 
  meRanGh align \
@@ -5457,11 +5459,11 @@ meRanGh - RNA bisulfite short read mapping to genome
  -id /export/data/mm10/BSgenomeIDX \
  -bg \
  -mbgc 10
- 
+
  The command above maps the reads from three diffent fastq files, separated by
  commas, to a genome using the index created as indicated in the previous section.
  The -GTF option indicates that the program should also search alignments spaning
- the known splicesites. meRanGh will use the index created in the "mkbsidx" run 
+ the known splicesites. meRanGh will use the index created in the "mkbsidx" run
  mode which was stored under "/export/data/mm10/BStranscriptomeIDX" (-id) (see above).
 
  The mapping process will use (-t) 16 cpus to search for valid alignments, from
@@ -5474,8 +5476,8 @@ meRanGh - RNA bisulfite short read mapping to genome
  option (-hisat2).
  The program will also create a Bedgraph (-bg) file for the alignments. Only positions
  with minimum 10 readcounts (-mbgc 10) will be recorded in the resulting Bedgraph.
- 
- 
+
+
 ### Paired End reads
 
  meRanGh align \
@@ -5501,7 +5503,7 @@ meRanGh - RNA bisulfite short read mapping to genome
  the order in which one specifies the forward and reverse read fastq files (see
  example aobve). Note: The paired fastq files may not have unpaired reads. If
  this is the case, one can use for example the "pairfq" (S. Evan Staton) tool to
- pair and sort the mates. In this example meRanGh allows for dovetailing 
+ pair and sort the mates. In this example meRanGh allows for dovetailing
  alignment of readpairs (-dovetail).
 
 =back
@@ -5513,19 +5515,19 @@ meRanGh - RNA bisulfite short read mapping to genome
 
  Bio::DB::Sam
  Parallel::ForkManager
- 
+
  These modules should be availble via CPAN or depending on your OS via the package
  manager.
 
  Bio::DB:Sam requires the samtools libraries (version 0.1.10 or higher, version 1.0
  is not compSatible with Bio::DB::Sam, yet) and header files in order to compile
  successfully.
- 
+
  Optional modules for generating m-bias plots:
  GD
  GD::Text::Align
  GD::Graph::lines
- 
+
  In addition to these Perl modules a working installation of hisat2 (>= v.2.0.13)
  and Bowtie2 (>= v.2.2.3) is required.
  A patched fastq-sort program is included in the distribution. Or available from
@@ -5547,14 +5549,14 @@ Perl 5.18.2 (RHEL 6.5)
 =item *
 Perl 5.24.0 (RHEL 6.8)
 
-=back 
+=back
 
 =head1 REQUIRED ARGUMENTS
 
 =over 2
 
 =item The runMode must be either 'mkbsidx' or 'align'.
- 
+
   mkbsidx : generate the genome database BS index for the aligner
   align   : align RNA-BSseq reads to the genome database.
 

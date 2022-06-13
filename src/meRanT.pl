@@ -47,7 +47,7 @@ use Bio::DB::Sam;
 
 my $DEBUG = 0;
 
-my $VERSION = '1.2.1b';
+my $VERSION = '1.3.0';
 
 my $version;
 my $help;
@@ -191,7 +191,8 @@ else {
 }
 
 # List of supported Bowtie2 versions
-my %supportedBowtie2Versions = ( '2.2.9' => 1
+my %supportedBowtie2Versions = ( '2.2.9' => 1,
+                                 '2.4.5' => 1,
                                 );
 my $bowtie2Version           = "";
 
@@ -590,9 +591,9 @@ Total # of unmapped + filtered reads:                " . $sl3 . "
 Alignments filtered with incorrect mapping flag:     " . $sl4 . "
 Alignments filtered with edit distance > " . $max_edit_dist . ":          " . $sl5 . "
 Reads filtered mapping to multiple genes:            " . $sl6 . "
-Reads filtered mapping to multiple places on a gene: " . $sl7 . " 
+Reads filtered mapping to multiple places on a gene: " . $sl7 . "
 Reads mapped to uniq genes and transcripts:          " . $sl8 . "
-Reads mapped multiple transcripts of a uniq gene:    " . $sl9 . " 
+Reads mapped multiple transcripts of a uniq gene:    " . $sl9 . "
 
 ";
 }
@@ -694,7 +695,7 @@ sub mkbsidx {
     say STDOUT "Indexing ... it may take a while to create: " . $idxName;
 
     my $bwt2b_error = 0;
-    
+
     $IDXBUILD->autoflush();
     while ( defined( my $idxBuildOut = $IDXBUILD->getline() ) ) {
         print STDOUT $idxBuildOut;
@@ -702,7 +703,7 @@ sub mkbsidx {
     }
     waitpid( $pid, 0 );
     close($IDXBUILD);
-    
+
     if ($bwt2b_error) {
         say STDERR "Could not generate the BS index...";
         exit(1);
@@ -839,7 +840,9 @@ sub runBowtie2 {
 
     # fork the BOWTIE2 mapper processes
     &$debug(@$bowtie2cmd);
-    my $pid = open( my $BOWTIE2, "-|", @$bowtie2cmd ) || die($!);
+    $bowtie2cmd = join(" ", @$bowtie2cmd);
+
+    my $pid = open( my $BOWTIE2, "-|", $bowtie2cmd ) || die($!);
 
     $BOWTIE2->autoflush();
 
@@ -1197,7 +1200,7 @@ sub processbowtie2samSE {
     splice( @samFields, 11, 0, ( "ZG:Z:" . $auxTagGeneName ) );
 
     my $softClippedBases = getSoftClippedSE(\@samFields);
-    
+
     # add to m-bias plot process queue
     if ( ( $samFields[1] & 0x10 ) == 0 ) {
         $mbq->enqueue( $read, $lastFQrec->{QS}, $softClippedBases->[0], $softClippedBases->[1], $readDirection );
@@ -1339,7 +1342,7 @@ sub process_multimappersSE {
     else {
 
         my $softClippedBases = getSoftClippedSE($bestAlignment{samFields});
-        
+
         # add to m-bias plot process queue
         if ( ( $bestAlignment{samFields}->[1] & 0x10 ) == 0 ) {
             $mbq->enqueue( $bestAlignment{read}, $bestAlignment{QS}, $softClippedBases->[0], $softClippedBases->[1], $readDirection );
@@ -2023,7 +2026,7 @@ sub getSoftClippedSE {
     my $softClipped;
     $softClipped->[0] = 0;
     $softClipped->[1] = 0;
-        
+
     if ( $bowtie2_mode eq "local" ) {
         my @tmpC = $alignment->[5] =~ /^(\d+H)?((\d+)S)?((\d+)[MIDNP=X])*((\d+)S)?(\d+H)?$/;
         if ( defined( $tmpC[2] ) ) {
@@ -2907,7 +2910,7 @@ sub bsconvertFQpe {
 
         # check if reads are properly paired
         if ( substr( $FWDfq_rec{id}, 0, -2 ) ne substr( $REVfq_rec{id}, 0, -2 ) ) {
-            die(   $FWDfq . " and " 
+            die(   $FWDfq . " and "
                  . $REVfq
                  . " are not properly paired, you may use pairfq \(S. Evan Staton\) tool to pair and sort the mates" );
         }
@@ -3167,7 +3170,7 @@ sub fqSpooler {
         else {
             open( $fq, "<$fqF" ) || die($!);
         }
-                
+
         while (1) {
             if (    ( ( $filesToSpool > 1 ) && ( $fileCounter < $filesToSpool ) )
                  && ( ( $fq->eof() ) || ( ( $lineCounter >= $maxLines ) && ( $firstNreads != -1 ) ) ) )
@@ -3200,7 +3203,7 @@ sub fqSpooler {
 
     $fifoout->close();
     undef($fifoout);
-    
+
     return;
 }
 
@@ -3255,7 +3258,7 @@ sub mBiasCounter {
             map { $mBiasDataR[$_]     += 0 } 0 .. $idxLength;      # avoid undefined values;
             map { $mBiasDataRhq[$_]   += 0 } 0 .. $idxLength;      # avoid undefined values;
             map { $mBiasReadDataR[$_] += 1 } $alignStart .. $alignEnd;
-            
+
             while (1) {
                 $pos = index( $read, 'G', $offset );
                 last if ( ($pos < 0)  || ($pos > $alignEnd) );
@@ -3266,7 +3269,7 @@ sub mBiasCounter {
             }
         }
     }
-    
+
     %mBiasData = (
                    mBiasReadDataF => [@mBiasReadDataF],
                    mBiasDataF     => [@mBiasDataF],
@@ -3558,7 +3561,7 @@ Options:
     --version   :   Print the program version and exit.
     -h|help     :   Print the program help information.
     -man        :   Print a detailed documentation.
-    
+
 EOF
 }
 
@@ -3580,7 +3583,7 @@ Options:
     --version           : Print the program version and exit.
     -h|help             : Print the program help information.
     -man                : Print a detailed documentation.
-    
+
 EOF
 }
 
@@ -3691,11 +3694,11 @@ Options:
     -bowtie2L|-L          : see Bowtie2 -L option (default: 20)
     -bowtie2D|-D          : see Bowtie2 -D option (default: 30)
     -bowtie2R|-R          : see Bowtie2 -R option (default: 2)
-    
+
     -bowtie2I|-I          : Minimum fragment length for valid paired-end alignments.
                             see Bowtie2 -I option (default: 0)
 
-    -bowtie2X|-X          : Maximum fragment length for valid paired-end alignments. 
+    -bowtie2X|-X          : Maximum fragment length for valid paired-end alignments.
                             see Bowtie2 -X option (default: 1000)
 
     -min-score            : see Bowtie2 -score-min option
@@ -3714,9 +3717,9 @@ Options:
     --version             : Print the program version and exit.
     -h|-help              : Print the program help information.
     -man                  : Print a detailed documentation.
-    
+
     -debug|-d             : Print some debugging information.
-        
+
 EOF
 }
 
@@ -3734,20 +3737,20 @@ meRanT - RNA bisulfite short read mapping to transcriptome
 
  meRanT mkbsidx -fa mm10.refSeqRNA.fa -id /export/data/mm10/BStranscriptomeIDX
 
- Generates an index for bisulfite mapping strand specific RNA-BSseq reads to a 
- transcriptome database provided as fasta file (e.g. RNA fasta file from RefSeq: 
+ Generates an index for bisulfite mapping strand specific RNA-BSseq reads to a
+ transcriptome database provided as fasta file (e.g. RNA fasta file from RefSeq:
  ftp://ftp.ncbi.nlm.nih.gov/refseq/M_musculus/mRNA_Prot/mouse.rna.fna.gz)
 
  The example above assumes that the Bowtie2 index builder command "bowtie2-build"
  is found in the system path "$PATH" or “bowtie2-build” from the meRanTK shipped
  third party programs is used. Alternatively, the path to "bowtie2-build" can be
  specified by using the commandline option "-bwt2b".
- 
+
 
 =head2 Align directed/strand specific RNA-BSseq short reads to a transcriptome
 
 =over 2
- 
+
 ### Single End reads
 
  meRanT align \
@@ -3762,14 +3765,14 @@ meRanT - RNA bisulfite short read mapping to transcriptome
  -MM \
  -i2g ./mm10.refSeqRNA2GeneName.map \
  -x /data/mm10/BSrefSeqIDX/mm10.refSeqRNA.C2T
- 
+
  The command above maps the reads from three different fastq files, separated by
  commas, to all transcript sequences of the mouse refseq databases in "mm10.refSeqRNA.fa",
  using the index created as indicated in the previous section.
  The process for selecting the best alignment to a transcript representing a gene
  requires a transcript to gene mapping file (-i2g) "mm10.refSeqRNA2GeneName.map".
  This mapping file must be in the following tab delimited format:
-    
+
     #seqID  Genesymbol  sequencelength
     [...]
     gi|568933834|ref|XR_376799.1|   Mpv17   1474
@@ -3779,9 +3782,9 @@ meRanT - RNA bisulfite short read mapping to transcriptome
     gi|58331157|ref|NM_017373.3|    Nfil3   2019
     gi|115298679|ref|NM_172673.3|   Frmd5   4218
     [...]
-    
+
  Where each transcript in the transcript database (fasta) is mapped to a Genesymbol.
- 
+
 
  The mapping process will use (-t) 32 CPUs and search for max. (-k) 10 valid alignments,
  from which the best one will be stored in the (-S) "RNA-BSseq.sam" result file. The
@@ -3789,12 +3792,12 @@ meRanT - RNA bisulfite short read mapping to transcriptome
  and it will also report ambiguous alignments in a separate tab delimited text file.
  The alignments of multi mapper reads (-MM) will additionally be stored in a separate
  SAM file.
-  
+
  The example above assumes that the Bowtie2 aligner command “bowtie2” is found
  in the systems path “$PATH” or “bowtie2” from the meRanTK shipped third party programs
  is used. Alternatively, the path to “bowtie2” can be specified using command line
  option “-bwt2”.
- 
+
 ### Paired End reads
 
  meRanT align \
@@ -3828,10 +3831,10 @@ meRanT - RNA bisulfite short read mapping to transcriptome
 
  Bio::DB::Sam
  Parallel::ForkManager
- 
+
  These modules should be availble via CPAN or depending on your OS via the package
  manager.
- 
+
  Bio::DB:Sam requires the samtools libraries (version 0.1.10 or higher, version 1.0
  is not compatible with Bio::DB::Sam, yet) and header files in order to compile
  successfully.
@@ -3860,14 +3863,14 @@ Perl 5.18.2 (RHEL 6.5)
 =item *
 Perl 5.24.0 (RHEL 6.8)
 
-=back 
+=back
 
 =head1 REQUIRED ARGUMENTS
 
 =over 2
 
 =item The runMode must be either 'mkbsidx' or 'align'.
- 
+
   mkbsidx : generate the transcriptome database BS index for the aligner
   align   : align RNA-BSseq reads to the transcriptome database.
 
@@ -3918,7 +3921,7 @@ Perl 5.24.0 (RHEL 6.8)
 =item -fastqF|-f
 
  Fastq file with forward reads (required if no -r)
- 
+
 =item -fastqR|-r
 
  Fastq file with reverse reads (required if no -f)
@@ -3935,7 +3938,7 @@ Perl 5.24.0 (RHEL 6.8)
 =item -outdir|-o
 
  Directory where results get stored (default: current directory)
- 
+
 =item -sam|-S
 
  Name of the SAM file for uniq and resolved alignments (default: meRanT_[timestamp].sam )
@@ -3965,7 +3968,7 @@ Perl 5.24.0 (RHEL 6.8)
 =item -ommitBAM|-ob
 
  Do not create an sorted and indexed BAM file (default: not set)
- 
+
 =item -deleteSAM|-ds
 
  Delete the SAM files after conversion to BAM format (default: not set)
@@ -3979,7 +3982,7 @@ Perl 5.24.0 (RHEL 6.8)
 
  Alignment mode. Can either be 'local' or 'end-to-end' (default: end-to-end)
  See Bowtie2 documentation for more information.
- 
+
 =item -max-edit-dist|-e
 
  Maximum edit distance to allow for a valid alignment (default: 2)
@@ -3992,7 +3995,7 @@ Perl 5.24.0 (RHEL 6.8)
 
  Transcript to gene mapping file.
  This mapping file must in in the following tab delimited format:
-    
+
     #seqID  Genesymbol  sequencelength
 
 =item -mbiasplot|-mbp
@@ -4034,15 +4037,15 @@ Perl 5.24.0 (RHEL 6.8)
  Max. number of valid alignment to consider in mapping. From these the programs
  will then choose the one with the best score on the longest transcript of the
  gene to which it maps unambiguosly.
- 
+
  see also Bowtie2 -k option (default: 10)
- 
+
 =item -bowtie2un|-un
 
  do not report unaligned reads. (default: not set)
- 
+
  See also -unalDir|-ud
-            
+
 =back
 
 =head1 LICENSE
@@ -4051,12 +4054,12 @@ Perl 5.24.0 (RHEL 6.8)
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation; either version 3 of the License, or
   (at your option) any later version.
-  
+
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
-  
+
   You should have received a copy of the GNU General Public License
   along with this program; if not, write to the Free Software
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,

@@ -42,7 +42,7 @@ use Parallel::ForkManager;
 use List::Util qw(max min sum);
 use Bio::DB::Sam;
 
-my $VERSION = '1.2.1b';
+my $VERSION = '1.3.0';
 my $version;
 my $help;
 my $man;
@@ -70,6 +70,7 @@ use constant {
 # 2 -> supports on the fly insertion of sjdb
 # 3 -> supports alignEndsType Extend5pOfReads12 , alignEndsProtrude
 my %supportedStarVersions = (
+                              '2.7.10a'      => 5,
                               'STAR_2.6.1d'  => 4,
                               'STAR_2.5.2b'  => 3,
                               'STAR_2.5.2a'  => 3,
@@ -137,6 +138,8 @@ our $unoutDir = "";
 my $samout = "";
 my $saveMultiMapperSeparately;
 
+my $star_limitIObufferSize = "30000000 50000000";
+
 # Run + Star Options
 my %run_opts = (
                  fastqF                                => \$fastQfwd,
@@ -157,7 +160,7 @@ my %run_opts = (
                  star_runThreadN                       => \$max_threads,
                  star_readFilesIn                      => "",
                  star_readMatesLengthsIn               => "NotEqual",
-                 star_limitIObufferSize                => 150000000,
+                 star_limitIObufferSize                => \$star_limitIObufferSize,
                  star_limitSjdbInsertNsj               => 1000000,
                  star_limitGenomeGenerateRAM           => 31000000000,
                  star_outSAMmode                       => "Full",
@@ -331,7 +334,7 @@ GetOptions(
     'star_genomeLoad=s',
     'star_runThreadN=i' => \$max_threads,
     'star_readMatesLengthsIn=s',
-    'star_limitIObufferSize=i',
+    'star_limitIObufferSize=s',
     'star_limitSjdbInsertNsj=i',
     'star_limitGenomeGenerateRAM=i',
     'star_outSAMstrandField=s',
@@ -472,6 +475,10 @@ else {
 #### align mode invoced, so lets continue the main program ####
 
 # add STAR version specific options
+if ($supportedStarVersions{$starVersion} < 5) {
+    $run_opts{star_limitIObufferSize} = (split(/\s+/, ${$run_opts{star_limitIObufferSize}}))[0];
+}
+
 if ($supportedStarVersions{$starVersion} >= 3 && ( ! defined($allowDoveTail) ) ) {
     push(@invariableStarSettings, "--alignEndsProtrude 0");
     $star_alignEndsType{'Extend5pOfReads12'} = 1;
@@ -853,7 +860,7 @@ Total # of reads:                                    " . $sl1 . "
 Total # of mapped reads:                             " . $sl2 . "
 Total # of unmapped reads:                           " . $sl3 . "
 Total # of unmapped + multimapper reads:             " . $sl4 . "
-Reads mapping to multiple places on reference:       " . $sl5 . " 
+Reads mapping to multiple places on reference:       " . $sl5 . "
 Reads mapped to uniq place on reference:             " . $sl6 . "
 ----------------------------------------------------------------------------
 
@@ -919,7 +926,7 @@ sub cleanup {
     my $star_G2A_files;
     my $star_C2T_genomeFiles;
     my $star_G2A_genomeFiles;
-    
+
     if ($tmpDir) {
         $star_C2T_files = $tmpDir . "/meRanGs_C2T_" . $$ . "_star_";
         $star_G2A_files = $tmpDir . "/meRanGs_G2A_" . $$ . "_star_";
@@ -1071,9 +1078,9 @@ sub checkChild {
           . $exit_code . "\n";
     }
     else {
-        print "** caught unknown process, with ident: " 
-          . $ident 
-          . " PID: " 
+        print "** caught unknown process, with ident: "
+          . $ident
+          . " PID: "
           . $pid
           . " and exit code: "
           . $exit_code . "\n";
@@ -1138,7 +1145,7 @@ sub _runStarIndexer {
       . $idxoutdir
       . " --genomeFastaFiles "
       . $fastaFiles;
-      
+
     if ($GTF) {
       $starIdxBuildCmd .=
         " --sjdbGTFfile "
@@ -1150,7 +1157,7 @@ sub _runStarIndexer {
       . " --sjdbOverhang "
       . $sjO;
     }
-    
+
     # limit RAM (bytes) for genome generation
     $starIdxBuildCmd .=
       " --limitGenomeGenerateRAM "
@@ -1191,7 +1198,7 @@ sub runStar {
 
     my $starDir_C2T;
     my $starDir_G2A;
-    
+
     if ($tmpDir) {
         $starDir_C2T = $tmpDir . "/meRanGs_C2T_" . $$ . "_star_";
         $starDir_G2A = $tmpDir . "/meRanGs_G2A_" . $$ . "_star_";
@@ -2934,11 +2941,14 @@ sub meRanSAManalyzerPE {
         my $fwdMateMappedLength;
         my $revMateMappedLength;
 
-        if ( defined( $finalAlignmentPair->[0] ) && defined( $finalAlignmentPair->[1] ) ) {
+        if ( defined( $finalAlignmentPair->[0] ) || defined( $finalAlignmentPair->[1] ) ) {
             $softClippedBases    = $finalAlignmentPair->[2]->[0];
             $fwdMateMappedLength = $finalAlignmentPair->[2]->[1];
             $revMateMappedLength = $finalAlignmentPair->[2]->[2];
             $mateOverlap         = $getMateOverlap->( $finalAlignmentPair, $fwdMateMappedLength, $revMateMappedLength );
+        }
+        else {
+            return ( undef, undef, undef, undef );
         }
 
         foreach my $finalAlignment ( @$finalAlignmentPair[ 0 .. 1 ] ) {
@@ -4148,7 +4158,7 @@ sub bsconvertFQpe {
         # check if reads are properly paired
         if ( substr( $FWDfq_rec{id}, 0, -2 ) ne substr( $REVfq_rec{id}, 0, -2 ) ) {
             &$debug( substr( $FWDfq_rec{id}, 0, -2 ), "<--->", substr( $REVfq_rec{id}, 0, -2 ), "Line:", __LINE__ );
-            die(   $FWDfq . " and " 
+            die(   $FWDfq . " and "
                  . $REVfq
                  . " are not properly paired, you may use pairfq \(S. Evan Staton\) tool to pair and sort the mates" );
         }
@@ -4920,9 +4930,9 @@ sub getSTARversion {
 
 sub checkIDXparamFile {
     my $idx = shift;
-    
+
     my $paramF = $idx . "/genomeParameters.txt";
-    
+
     if (-f $paramF) {
         my $paramFH = IO::File->new( $paramF, O_RDONLY);
         while ( my $pl = $paramFH->getline() ) {
@@ -4972,7 +4982,7 @@ sub checkStar {
 
 sub nicePath {
     my $rawPath = shift;
-    
+
     $rawPath =~ s/\/+/\//g;
     return($rawPath);
 }
@@ -4991,7 +5001,7 @@ Options:
     --version   :   Print the program version and exit.
     -h|help     :   Print the program help information.
     -m|man      :   Print a detailed documentation.
-    
+
 EOF
 }
 
@@ -5044,11 +5054,11 @@ Options:
     -star_sjdbGTFchrPrefix
                         : see STAR -sjdbGTFchrPrefix option
                          (default: not set)
- 
+
     -star_sjdbGTFfeatureExon
                         : see STAR -sjdbGTFfeatureExon option
                           (default: exon)
-    
+
     -star_limitGenomeGenerateRAM
                         : maximum available RAM (bytes) for genome generation
                           see STAR -limitGenomeGenerateRAM option
@@ -5210,7 +5220,7 @@ Options:
     -star_sjdbGTFchrPrefix
                           : see STAR -sjdbGTFchrPrefix option
                            (default: not set)
- 
+
     -star_sjdbGTFfeatureExon
                           : see STAR -sjdbGTFfeatureExon option
                             (default: exon)
@@ -5295,7 +5305,7 @@ Options:
                           : see STAR -outSJfilterDistToOtherSJmin option
                             (default: [ 10, 0, 5, 10 ])
 
-    -star_outSJfilterIntronMaxVsReadN 
+    -star_outSJfilterIntronMaxVsReadN
                           : see STAR -outSJfilterIntronMaxVsReadN option
                             (default: [ 50000, 100000, 200000 ])
 
@@ -5392,7 +5402,7 @@ Options:
 
     -star_alignSoftClipAtReferenceEnds
                           : see STAR -alignSoftClipAtReferenceEnds option
-                            (default: Yes)                            
+                            (default: Yes)
 
     -star_alignIntronMin  : see STAR -alignIntronMin option
                             (default: 21)
@@ -5411,7 +5421,7 @@ Options:
                           : see STAR -alignSJoverhangMin option
                             (default: 5)
 
-    -star_alignSJDBoverhangMin 
+    -star_alignSJDBoverhangMin
                           : see STAR -alignSJDBoverhangMin option
                             (default: 3)
 
@@ -5486,7 +5496,7 @@ meRanGs - RNA bisulfite short read mapping to genome
     -GTFtagEPT Parent \
     -sjO 49
 
- Generates an index for bisulfite mapping strand specific RNA-BSseq reads to a 
+ Generates an index for bisulfite mapping strand specific RNA-BSseq reads to a
  genome database provided as fasta file(s)) (e.g. from genome assembly mm10).
  The indexer will run with max. (-t) 4 threads.
  A GFF3 (mm10.GFF3) file is used to specify the splice junctions. This example
@@ -5498,12 +5508,12 @@ meRanGs - RNA bisulfite short read mapping to genome
  systems path “$PATH” or “STAR” from the meRanTK shipped third party programs is
  used. Alternatively, the path to “STAR” can be specified using command line
  option “-star”.
- 
+
 
 =head2 Align directed/strand specific RNA-BSseq short reads to a genome
 
 =over 2
- 
+
 ### Single End reads
 
  meRanGs align \
@@ -5535,13 +5545,13 @@ meRanGs - RNA bisulfite short read mapping to genome
  genomic positions that are covered by more than 10 reads (-mbgc). Finally, an
  m-Bias plot will be generated which may help to detect potential read positional
  "methylation" biases, that could rise because of sequencing or library problems.
- 
+
  The example above assumes that the STAR aligner command “STAR” is found in the
  systems path “$PATH” or “STAR” from the meRanTK shipped third party programs is
  used. Alternatively, the path to “STAR” can be specified using command line
  option “-star”.
- 
- 
+
+
 ### Paired End reads
 
  meRanGs align \
@@ -5575,19 +5585,19 @@ meRanGs - RNA bisulfite short read mapping to genome
 
  Bio::DB::Sam
  Parallel::ForkManager
- 
+
  These modules should be availble via CPAN or depending on your OS via the package
  manager.
 
  Bio::DB:Sam requires the samtools libraries (version 0.1.10 or higher, version 1.0
  is not compatible with Bio::DB::Sam, yet) and header files in order to compile
  successfully.
- 
+
  Optional modules for generating m-bias plots:
  GD
  GD::Text::Align
  GD::Graph::lines
- 
+
  In addition to these Perl modules a working installation of STAR (>= 2.4.0d) is required.
 
 =head1 TESTED WITH:
@@ -5606,14 +5616,14 @@ Perl 5.18.2 (RHEL 6.5)
 =item *
 Perl 5.24.0 (RHEL 6.8)
 
-=back 
+=back
 
 =head1 REQUIRED ARGUMENTS
 
 =over 2
 
 =item The runMode must be either 'mkbsidx' or 'align'.
- 
+
   mkbsidx : generate the genome database BS index for the aligner
   align   : align RNA-BSseq reads to the genome database.
 

@@ -29,7 +29,7 @@ use Getopt::Long qw(:config no_ignore_case no_auto_abbrev);
 use IO::File;
 use File::Basename;
 
-my $VERSION = '1.0.1';
+my $VERSION = '1.3.0';
 my $version;
 my $help;
 

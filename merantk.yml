@@ -1,0 +1,21 @@
+# conda ENV for meRanTK
+name: merantk
+
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.9
+  - bioconda::perl
+  - bioconda::perl-text-nsp
+  - bioconda::perl-gd
+  - bioconda::perl-bio-samtools
+  - bioconda::perl-gdtextutil
+  - bioconda::perl-gdgraph
+  - bioconda::perl-mce
+  - bioconda::perl-math-cdf
+  - bioconda::perl-parallel-forkmanager
+  - bioconda::star=2.7.10a
+  - bioconda::bowtie2=2.4.5
+  - bioconda::hisat2=2.2.1

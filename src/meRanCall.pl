@@ -51,7 +51,7 @@ use constant {
 
 my $DEBUG = 0;
 
-my $VERSION = '1.2.1b';
+my $VERSION = '1.3.0';
 my $version;
 my $help;
 my $man;
@@ -501,7 +501,7 @@ print "Starting to process: " . $nrOftargets . " targets on " . $procs . " CPUs 
 # print Header line
 my $headerLine = "\#"
   . join( "\t",
-          qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate score seqContext geneName candidateName)
+          qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate SNR CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate score seqContext geneName candidateName)
   )
   . "\n";
 $resFH->print($headerLine) unless ($calculateConvR);
@@ -510,14 +510,14 @@ if ($FDR) {
     if ( !$FDRrate ) {
         $headerLine = "\#"
           . join( "\t",
-                  qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate p-value_mState_adj score seqContext geneName candidateName)
+                  qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate SNR CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate p-value_mState_adj score seqContext geneName candidateName)
           )
           . "\n";
     }
     else {
         $headerLine = "\#"
           . join( "\t",
-                  qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate p-value_mRate_adj score seqContext geneName candidateName)
+                  qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate SNR CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate p-value_mRate_adj score seqContext geneName candidateName)
           )
           . "\n";
     }
@@ -686,7 +686,7 @@ if ($FDR) {
 
             my @resFields = split( '\t', $record->[2] );
             my $pv_adj_nice = sprintf( "%01.6e", $record->[1] );
-            splice( @resFields, 16, 0, $pv_adj_nice );
+            splice( @resFields, 17, 0, $pv_adj_nice );
 
             my $resLine = join( "\t", @resFields );
             $FDRresFH->print($resLine);
@@ -1038,7 +1038,9 @@ sub callMethStatus {
     my $coverage = 0;
     my $reportMe = 0;
 
-    if ( ( $total >= $minCov ) && ( $baseCount->{C} >= $minC ) && ( ( $total / $cov_total ) > $snr ) ) {
+    my $local_snr = $total / $cov_total;
+
+    if ( ( $total >= $minCov ) && ( $baseCount->{C} >= $minC ) && ( $local_snr > $snr ) ) {
         my $maxCalledBase = reduce { $baseCount->{$a} > $baseCount->{$b} ? $a : $b } keys %{$baseCount};
         my @equalCalledBases = grep { $baseCount->{$_} eq $baseCount->{$maxCalledBase} } keys %{$baseCount};
         $maxCalledBase = join( '', ( sort(@equalCalledBases) ) );
@@ -1159,6 +1161,7 @@ sub callMethStatus {
             $m5Cs_->{$seqid}->{pos}{$pos}{geneName} = $geneName;
             $m5Cs_->{$seqid}->{pos}{$pos}{mrate}    = $methRate;
             $m5Cs_->{$seqid}->{pos}{$pos}{mutRate}  = $mutRate;
+            $m5Cs_->{$seqid}->{pos}{$pos}{snr}      = $local_snr;
             $m5Cs_->{$seqid}->{pos}{$pos}{cov}      = $total;
             $m5Cs_->{$seqid}->{pos}{$pos}{methNr}   = $methNr;
             $m5Cs_->{$seqid}->{pos}{$pos}{mutNr}    = $mutNr;
@@ -1204,7 +1207,9 @@ sub callMethStatusAZA {
     my $coverage = 0;
     my $reportMe = 0;
 
-    if ( ( $total >= $minCov ) && ( $baseCount->{G} >= $minC ) && ( ( $total / $cov_total ) > $snr ) ) {
+    my $local_snr = $total / $cov_total;
+
+    if ( ( $total >= $minCov ) && ( $baseCount->{G} >= $minC ) && ( $local_snr > $snr ) ) {
         my $maxCalledBase = reduce { $baseCount->{$a} > $baseCount->{$b} ? $a : $b } keys %{$baseCount};
         my @equalCalledBases = grep { $baseCount->{$_} eq $baseCount->{$maxCalledBase} } keys %{$baseCount};
         $maxCalledBase = join( '', ( sort(@equalCalledBases) ) );
@@ -1309,6 +1314,7 @@ sub callMethStatusAZA {
             $m5Cs_->{$seqid}->{pos}{$pos}{geneName} = $geneName;
             $m5Cs_->{$seqid}->{pos}{$pos}{mrate}    = $methRate;
             $m5Cs_->{$seqid}->{pos}{$pos}{mutRate}  = $mutRate;
+            $m5Cs_->{$seqid}->{pos}{$pos}{snr}      = $local_snr;
             $m5Cs_->{$seqid}->{pos}{$pos}{cov}      = $total;
             $m5Cs_->{$seqid}->{pos}{$pos}{methNr}   = $methNr;
             $m5Cs_->{$seqid}->{pos}{$pos}{mutNr}    = $mutNr;
@@ -1709,6 +1715,10 @@ sub resultCollector {
                       : $m5CposData->{refbase};
                     my $geneName = $m5CposData->{geneName};
 
+                    my $snrNice = ( defined( $m5CposData->{snr} ) )
+                      ? sprintf( "%01.3e", $m5CposData->{snr} )
+                      : "NaN";
+
                     my $candidateName = "m5C_" . ++$m5Cnr;
                     my $resultLine = join(
                                            "\t",
@@ -1716,10 +1726,10 @@ sub resultCollector {
                                               $seqid,                 $pos,                   $s,
                                               $m5CposData->{refbase}, $m5CposData->{cov},     $m5CposData->{methNr},
                                               $mrate,                 $m5CposData->{mutNr},   $mutRate,
-                                              $m5CposData->{mCBase},  $m5CposData->{mCBaseC}, $m5CposData->{sate},
-                                              $lCI,                   $uCI,                   $pvalNice,
-                                              $rpvalNice,             $scoreNice,             $context,
-                                              $geneName,              $candidateName
+                                              $snrNice,               $m5CposData->{mCBase},  $m5CposData->{mCBaseC},
+                                              $m5CposData->{sate},    $lCI,                   $uCI,
+                                              $pvalNice,              $rpvalNice,             $scoreNice,
+                                              $context,               $geneName,              $candidateName
                                              )
                       )
                       . "\n";

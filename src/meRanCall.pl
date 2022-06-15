@@ -2484,11 +2484,11 @@ Perl 5.18.2 (RHEL 6.5)
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
   MA 02110-1301, USA.
 
-  Copyright (C) 2016 D.Rieder
+  Copyright (C) 2022 D.Rieder
 
 =head1 COPYRIGHT
 
-  Copyright (C) 2016 Dietmar Rieder. All Rights Reserved.
+  Copyright (C) 2022 Dietmar Rieder. All Rights Reserved.
 
 =head1 AUTHOR
 

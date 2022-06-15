@@ -3,7 +3,7 @@
 #
 #  meRanT.pl
 #
-#  Copyright 2019 Dietmar Rieder <dietmar.rieder@i-med.ac.at>
+#  Copyright 2022 Dietmar Rieder <dietmar.rieder@i-med.ac.at>
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -3773,14 +3773,12 @@ meRanT - RNA bisulfite short read mapping to transcriptome
  requires a transcript to gene mapping file (-i2g) "mm10.refSeqRNA2GeneName.map".
  This mapping file must be in the following tab delimited format:
 
-    #seqID  Genesymbol  sequencelength
+    #seqID      Genesymbol   sequencelength
     [...]
-    gi|568933834|ref|XR_376799.1|   Mpv17   1474
-    gi|568933835|ref|XR_376800.1|   Mpv17   1301
-    gi|568933836|ref|XR_376801.1|   Mpv17   1840
-    gi|120444911|ref|NM_011960.2|   Parg    4391
-    gi|58331157|ref|NM_017373.3|    Nfil3   2019
-    gi|115298679|ref|NM_172673.3|   Frmd5   4218
+    NR_046233.2 Rn45s        13400
+    NR_003279.1 Rn28s1       4730
+    NR_003280.2 Rs5-8s1      157
+    NM_134105.2 Txndc11      1233
     [...]
 
  Where each transcript in the transcript database (fasta) is mapped to a Genesymbol.
@@ -4065,11 +4063,11 @@ Perl 5.24.0 (RHEL 6.8)
   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
   MA 02110-1301, USA.
 
-  Copyright (C) 2016 D.Rieder
+  Copyright (C) 2022 D.Rieder
 
 =head1 COPYRIGHT
 
-  Copyright (C) 2016 Dietmar Rieder. All Rights Reserved.
+  Copyright (C) 2022 Dietmar Rieder. All Rights Reserved.
 
 =head1 AUTHOR
 

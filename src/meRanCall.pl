@@ -3,7 +3,7 @@
 #
 #  meRanCall.pl
 #
-#  Copyright 2019 Dietmar Rieder <dietmar.rieder@i-med.ac.at>
+#  Copyright 2022 Dietmar Rieder <dietmar.rieder@i-med.ac.at>
 #
 #  This program is free software; you can redistribute it and/or modify
 #  it under the terms of the GNU General Public License as published by
@@ -2322,21 +2322,22 @@ meRanCall - RNA cytosine methylation caller
  7.  methRate       : methylation rate
  8.  mut_count      : # of non-reference bases at the position
  9.  mutRate        : mutation rate (#non reference bases / coverage)
- 10. CalledBase     : prevailing base(s) at the position
- 11. CB_count       : CalledBase count
- 12. state          : methylation status (M|MV|UV|V)
+ 10. SNR            : local signal to noise ratio
+ 11. CalledBase     : prevailing base(s) at the position
+ 12. CB_count       : CalledBase count
+ 13. state          : methylation status (M|MV|UV|V)
                       M : methylated C, C on reference
                       MV: methylated C, NO C on reference (mutated)
                       UV: unmethylated C, NO C on reference (mutated)
                       V : mutated base
- 13. 95_CI_lower    : lower bound of the 95% confidence interval (Wilson score interval)
- 14. 95_CI_upper    : upper bound of the 95% confidence interval (Wilson score interval)
- 15. p-value_mState : p-value of the methylation State (Lister et al. 2009)
- 16. p-value_mRate  : p-value of the methylation Rate (Barturen et al. 2013)
- 17. Score          : methylation call score
- 18. seqContext     : sequence Context arround the mehtylated C
- 19. geneName       : gene name associated with the methylated C
- 20. candidateName  : name assigned to the methylated C candidate
+ 14. 95_CI_lower    : lower bound of the 95% confidence interval (Wilson score interval)
+ 15. 95_CI_upper    : upper bound of the 95% confidence interval (Wilson score interval)
+ 16. p-value_mState : p-value of the methylation State (Lister et al. 2009)
+ 17. p-value_mRate  : p-value of the methylation Rate (Barturen et al. 2013)
+ 18. Score          : methylation call score
+ 19. seqContext     : sequence Context arround the mehtylated C
+ 20. geneName       : gene name associated with the methylated C
+ 21. candidateName  : name assigned to the methylated C candidate
 
  The methylation calling process will use (-p) 32 cpus in parallel.
 

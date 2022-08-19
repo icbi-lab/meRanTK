@@ -947,7 +947,7 @@ sub analyzePileup {
 
         $cov_total{$strand}++;
 
-        next unless ( $read_Ccount < $C_cutoff );
+        next unless ( $read_Ccount <= $C_cutoff );
         &$debug( "Pass:",
                  $seqid . ":" . $pos . ":" . $strand,
                  "QB:" . $qbase,

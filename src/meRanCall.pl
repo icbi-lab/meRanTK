@@ -501,7 +501,7 @@ print "Starting to process: " . $nrOftargets . " targets on " . $procs . " CPUs 
 # print Header line
 my $headerLine = "\#"
   . join( "\t",
-          qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate SNR CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate score seqContext geneName candidateName)
+          qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate CR SNR CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate score seqContext geneName candidateName)
   )
   . "\n";
 $resFH->print($headerLine) unless ($calculateConvR);
@@ -510,14 +510,14 @@ if ($FDR) {
     if ( !$FDRrate ) {
         $headerLine = "\#"
           . join( "\t",
-                  qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate SNR CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate p-value_mState_adj score seqContext geneName candidateName)
+                  qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate CR SNR CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate p-value_mState_adj score seqContext geneName candidateName)
           )
           . "\n";
     }
     else {
         $headerLine = "\#"
           . join( "\t",
-                  qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate SNR CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate p-value_mRate_adj score seqContext geneName candidateName)
+                  qw(SeqID refPos refStrand refBase cov C_count methRate mut_count mutRate CR SNR CalledBase CB_count state 95_CI_lower 95_CI_upper p-value_mState p-value_mRate p-value_mRate_adj score seqContext geneName candidateName)
           )
           . "\n";
     }
@@ -1039,6 +1039,7 @@ sub callMethStatus {
     my $reportMe = 0;
 
     my $local_snr = $total / $cov_total;
+    my $cr = $conversionRate;
 
     if ( ( $total >= $minCov ) && ( $baseCount->{C} >= $minC ) && ( $local_snr > $snr ) ) {
         my $maxCalledBase = reduce { $baseCount->{$a} > $baseCount->{$b} ? $a : $b } keys %{$baseCount};
@@ -1068,7 +1069,6 @@ sub callMethStatus {
                     $reportMe = 1;
                     $m5Cs_->{$seqid}->{pos}{$pos}{sate} = 'M';
 
-                    my $cr = $conversionRate;
                     if ($useGeneCR) {
                         my $geneIdx = getGeneIdxFromPos( $seqid, $pos, $strand );
                         $cr =
@@ -1107,7 +1107,6 @@ sub callMethStatus {
                 $reportMe = 1;
                 $m5Cs_->{$seqid}->{pos}{$pos}{sate} = 'MV';
 
-                my $cr = $conversionRate;
                 if ($useGeneCR) {
                     my $geneIdx = getGeneIdxFromPos( $seqid, $pos, $strand );
                     $cr =
@@ -1162,6 +1161,7 @@ sub callMethStatus {
             $m5Cs_->{$seqid}->{pos}{$pos}{mrate}    = $methRate;
             $m5Cs_->{$seqid}->{pos}{$pos}{mutRate}  = $mutRate;
             $m5Cs_->{$seqid}->{pos}{$pos}{snr}      = $local_snr;
+            $m5Cs_->{$seqid}->{pos}{$pos}{cr}       = $cr;
             $m5Cs_->{$seqid}->{pos}{$pos}{cov}      = $total;
             $m5Cs_->{$seqid}->{pos}{$pos}{methNr}   = $methNr;
             $m5Cs_->{$seqid}->{pos}{$pos}{mutNr}    = $mutNr;
@@ -1208,6 +1208,7 @@ sub callMethStatusAZA {
     my $reportMe = 0;
 
     my $local_snr = $total / $cov_total;
+    my $cr = $conversionRate;
 
     if ( ( $total >= $minCov ) && ( $baseCount->{G} >= $minC ) && ( $local_snr > $snr ) ) {
         my $maxCalledBase = reduce { $baseCount->{$a} > $baseCount->{$b} ? $a : $b } keys %{$baseCount};
@@ -1237,7 +1238,6 @@ sub callMethStatusAZA {
                     $reportMe = 1;
                     $m5Cs_->{$seqid}->{pos}{$pos}{sate} = 'M';
 
-                    my $cr = $conversionRate;
                     if ($useGeneCR) {
                         my $geneIdx = getGeneIdxFromPos( $seqid, $pos, $strand );
                         $cr =
@@ -1315,6 +1315,7 @@ sub callMethStatusAZA {
             $m5Cs_->{$seqid}->{pos}{$pos}{mrate}    = $methRate;
             $m5Cs_->{$seqid}->{pos}{$pos}{mutRate}  = $mutRate;
             $m5Cs_->{$seqid}->{pos}{$pos}{snr}      = $local_snr;
+            $m5Cs_->{$seqid}->{pos}{$pos}{cr}       = $cr;
             $m5Cs_->{$seqid}->{pos}{$pos}{cov}      = $total;
             $m5Cs_->{$seqid}->{pos}{$pos}{methNr}   = $methNr;
             $m5Cs_->{$seqid}->{pos}{$pos}{mutNr}    = $mutNr;
@@ -1719,6 +1720,10 @@ sub resultCollector {
                       ? sprintf( "%01.3e", $m5CposData->{snr} )
                       : "NaN";
 
+                    my $crNice = ( defined( $m5CposData->{cr} ) )
+                      ? sprintf( "%01.3e", $m5CposData->{cr} )
+                      : "NaN";
+
                     my $candidateName = "m5C_" . ++$m5Cnr;
                     my $resultLine = join(
                                            "\t",
@@ -1726,10 +1731,11 @@ sub resultCollector {
                                               $seqid,                 $pos,                   $s,
                                               $m5CposData->{refbase}, $m5CposData->{cov},     $m5CposData->{methNr},
                                               $mrate,                 $m5CposData->{mutNr},   $mutRate,
-                                              $snrNice,               $m5CposData->{mCBase},  $m5CposData->{mCBaseC},
-                                              $m5CposData->{sate},    $lCI,                   $uCI,
-                                              $pvalNice,              $rpvalNice,             $scoreNice,
-                                              $context,               $geneName,              $candidateName
+                                              $crNice,                $snrNice,               $m5CposData->{mCBase},
+                                              $m5CposData->{mCBaseC}, $m5CposData->{sate},    $lCI,
+                                              $uCI,                   $pvalNice,              $rpvalNice,
+                                              $scoreNice,             $context,               $geneName,
+                                              $candidateName
                                              )
                       )
                       . "\n";
@@ -2322,22 +2328,23 @@ meRanCall - RNA cytosine methylation caller
  7.  methRate       : methylation rate
  8.  mut_count      : # of non-reference bases at the position
  9.  mutRate        : mutation rate (#non reference bases / coverage)
- 10. SNR            : local signal to noise ratio
- 11. CalledBase     : prevailing base(s) at the position
- 12. CB_count       : CalledBase count
- 13. state          : methylation status (M|MV|UV|V)
+ 10. CR             : conversion rate (gene specific or global)
+ 11. SNR            : local signal to noise ratio
+ 12. CalledBase     : prevailing base(s) at the position
+ 13. CB_count       : CalledBase count
+ 14. state          : methylation status (M|MV|UV|V)
                       M : methylated C, C on reference
                       MV: methylated C, NO C on reference (mutated)
                       UV: unmethylated C, NO C on reference (mutated)
                       V : mutated base
- 14. 95_CI_lower    : lower bound of the 95% confidence interval (Wilson score interval)
- 15. 95_CI_upper    : upper bound of the 95% confidence interval (Wilson score interval)
- 16. p-value_mState : p-value of the methylation State (Lister et al. 2009)
- 17. p-value_mRate  : p-value of the methylation Rate (Barturen et al. 2013)
- 18. Score          : methylation call score
- 19. seqContext     : sequence Context arround the mehtylated C
- 20. geneName       : gene name associated with the methylated C
- 21. candidateName  : name assigned to the methylated C candidate
+ 15. 95_CI_lower    : lower bound of the 95% confidence interval (Wilson score interval)
+ 16. 95_CI_upper    : upper bound of the 95% confidence interval (Wilson score interval)
+ 17. p-value_mState : p-value of the methylation State (Lister et al. 2009)
+ 18. p-value_mRate  : p-value of the methylation Rate (Barturen et al. 2013)
+ 19. Score          : methylation call score
+ 20. seqContext     : sequence Context arround the mehtylated C
+ 21. geneName       : gene name associated with the methylated C
+ 22. candidateName  : name assigned to the methylated C candidate
 
  The methylation calling process will use (-p) 32 cpus in parallel.
 

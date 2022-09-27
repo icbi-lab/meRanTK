@@ -79,6 +79,7 @@ my $bowtie2_I   = 0;
 my $bowtie2_X   = 1000;
 my $bowtie2_min_score      = "";            # defaults to 'G,20,8' in local mode and to 'L,-0.4,-0.4' in end-to-end mode
 my $bowtie2_k              = 10;
+my $bowtie2_a;
 my $bowtie2_un             = "";
 my $reportAmbiguosMultiMap = "";
 my $bowtie2_mode           = "end-to-end";
@@ -161,6 +162,7 @@ GetOptions(
             'bowtie2X|X=i'         => \$bowtie2_X,
             'min-score=s'          => \$bowtie2_min_score,
             'bowtie2k|k=i'         => \$bowtie2_k,
+            'bowtie2a|a'           => \$bowtie2_a,
             'bowtie2un|un'         => \$bowtie2_un,
             'unalDir|ud=s'         => \$unoutDir,
             'samMM|MM'             => \$saveMultiMapperSeparately,
@@ -442,8 +444,11 @@ if ($bowtie2_min_score) {
     my $arg = "--min-score " . $bowtie2_min_score;
     push( @bowtie2args, $arg );
 }
-if ($bowtie2_k) {
+if (!$bowtie2_a && $bowtie2_k) {
     my $arg = "-k " . $bowtie2_k;
+    push( @bowtie2args, $arg );
+} elsif($bowtie2_a) {
+    my $arg = "-a ";
     push( @bowtie2args, $arg );
 }
 if ($bowtie2_p) {

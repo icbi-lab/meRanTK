@@ -1,4 +1,7 @@
 -Version 1.3.1 (not yet released)
+  - meRanT:
+    Add -a optinon which allows to run bowtie2 with "-a" so that
+    there is no upper limit on the number of alignments.
   - meRanCall:
     fix C-cutoff filter. C-count per read should be less or equal
     C-cutoff, otherwise no Cs will be called if C-cutoff is 1.

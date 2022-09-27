@@ -50,12 +50,32 @@ test:
         -S meRanT_test.sam  \
         -x ./testdata/mm10/meRanTIDX/mm10.refSeqRNA-noPRED.500_C2T
     - |
+        ./meRanT.pl align \
+        -t 2 \
+        -a \
+        -f ./testdata/fastq/clean_KHOD_400k_test.fastq \
+        -i2g ./testdata/refSeq/mm10.refSeqRNA-noPRED.500.t2g.map \
+        -o ./testdata/results \
+        -S meRanT_test_a.sam  \
+        -x ./testdata/mm10/meRanTIDX/mm10.refSeqRNA-noPRED.500_C2T
+    - |
         ./meRanCall.pl \
         -p 2 \
         -s ./testdata/results/meRanT_test.sam \
         -f ./testdata/refSeq/mm10.refSeqRNA-noPRED.500.fa \
         -tref \
         -o ./testdata/results/meRanT_meRanCall_m5Ct.txt \
+        -md 5 \
+        -cr 0.99 \
+        -mBQ 30 \
+        -sc 5
+    - |
+        ./meRanCall.pl \
+        -p 2 \
+        -s ./testdata/results/meRanT_test_a.sam \
+        -f ./testdata/refSeq/mm10.refSeqRNA-noPRED.500.fa \
+        -tref \
+        -o ./testdata/results/meRanT_meRanCall_m5Ct_a.txt \
         -md 5 \
         -cr 0.99 \
         -mBQ 30 \

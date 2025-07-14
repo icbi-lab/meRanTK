@@ -36,13 +36,20 @@ From: continuumio/miniconda3
     mv /meRanGh.pl /usr/local/bin/meRanGh.pl
     mv /meRanGs.pl /usr/local/bin/meRanGs.pl
     mv /meRanT.pl /usr/local/bin/meRanT.pl
-    
+
     chmod +x /usr/local/bin/meRanAnnotate.pl
     chmod +x /usr/local/bin/meRanCall.pl
     chmod +x /usr/local/bin/meRanCompare.pl
     chmod +x /usr/local/bin/meRanGh.pl
     chmod +x /usr/local/bin/meRanGs.pl
     chmod +x /usr/local/bin/meRanT.pl
+    
+    ln -s /usr/local/bin/meRanAnnotate.pl /usr/local/bin/meRanAnnotate
+    ln -s /usr/local/bin/meRanCall.pl /usr/local/bin/meRanCall
+    ln -s /usr/local/bin/meRanCompare.pl /usr/local/bin/meRanCompare
+    ln -s /usr/local/bin/meRanGh.pl /usr/local/bin/meRanGh
+    ln -s /usr/local/bin/meRanGs.pl /usr/local/bin/meRanGs
+    ln -s /usr/local/bin/meRanT.pl /usr/local/bin/meRanT
 
 %environment
     # Activate conda environment automatically

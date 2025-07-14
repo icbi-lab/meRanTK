@@ -1,0 +1,56 @@
+Bootstrap: docker
+From: continuumio/miniconda3
+
+%labels
+    Author Dietmar Rieder
+    Version merantk
+    Description Singularity container with meRanTK conda environment
+
+%files
+    merantk.yml /merantk.yml
+    src/meRanAnnotate.pl /meRanAnnotate.pl
+    src/meRanCall.pl /meRanCall.pl
+    src/meRanCompare.pl /meRanCompare.pl
+    src/meRanGh.pl /meRanGh.pl
+    src/meRanGs.pl /meRanGs.pl
+    src/meRanT.pl /meRanT.pl
+
+%post
+    # Update base system
+    apt-get update && apt-get install -y wget bzip2 build-essential
+
+    # Create the environment from the YAML file
+    conda env create -f /merantk.yml
+
+    # Activate environment (this is just for build; use %environment for runtime)
+    echo "source activate merantk" >> ~/.bashrc
+
+    # Clean up
+    conda clean -a -y
+    rm -rf /merantk.yml
+    
+    # install merantk
+    mv /meRanAnnotate.pl /usr/local/bin/meRanAnnotate.pl
+    mv /meRanCall.pl /usr/local/bin/meRanCall.pl
+    mv /meRanCompare.pl /usr/local/bin/meRanCompare.pl
+    mv /meRanGh.pl /usr/local/bin/meRanGh.pl
+    mv /meRanGs.pl /usr/local/bin/meRanGs.pl
+    mv /meRanT.pl /usr/local/bin/meRanT.pl
+    
+    chmod +x /usr/local/bin/meRanAnnotate.pl
+    chmod +x /usr/local/bin/meRanCall.pl
+    chmod +x /usr/local/bin/meRanCompare.pl
+    chmod +x /usr/local/bin/meRanGh.pl
+    chmod +x /usr/local/bin/meRanGs.pl
+    chmod +x /usr/local/bin/meRanT.pl
+
+%environment
+    # Activate conda environment automatically
+    export PATH=/opt/conda/envs/merantk/bin:$PATH
+    source /opt/conda/etc/profile.d/conda.sh
+    conda activate merantk
+
+%runscript
+    echo "This container runs the meRanTK conda environment."
+    exec "$@"
+

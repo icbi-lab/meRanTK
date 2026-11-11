@@ -2,6 +2,11 @@ meRanTK 1.3.0
 methylated RNA analysis Tool Kit
 © Dietmar Rieder, 2022
 
+*** meRanTK 2 (Python rewrite, new features) is developed at
+*** https://github.com/icbi-lab/meRanTK2
+*** This repository contains the Perl version 1.x, kept for reproducibility.
+*** New development happens in meRanTK 2.
+
 AUTHOR/SUPPORT:
 Dietmar Rieder, dietmar . rieder (at) i-med . ac .at
 
